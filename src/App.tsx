@@ -612,7 +612,7 @@ export default function App() {
   };
 
   const boardStyle = {
-    backgroundImage: "url('./board.jpg')"
+    backgroundImage: `url(${boardImage})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -949,7 +949,7 @@ export default function App() {
           <header 
             className="relative w-full overflow-hidden min-h-[500px] flex items-center bg-stone-100"
             style={{ 
-              backgroundImage: "url('./bg.png')" 
+              backgroundImage: `url(${bgImage})`, 
               backgroundSize: 'cover', 
               backgroundPosition: 'center', 
               backgroundRepeat: 'no-repeat'
