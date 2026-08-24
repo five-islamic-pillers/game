@@ -1,0 +1,6 @@
+{
+  "name": "پێنج پایەکەی ئیسلام",
+  "description": "یاری خێزانی پێنج پایەکەی ئیسلام",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
