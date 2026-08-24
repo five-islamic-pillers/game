@@ -1,6 +1,6 @@
 {
   "name": "پێنج پایەکەی ئیسلام",
-  "description": "یاری خێزانی پێنج پایەکەی ئیسلام",
+  "description": "ئامانجی یارییەکە ئەوەیە وەڵامی ڕاستی پرسیارەکان بدەیتەوە، فێرببیت دەربارەی پێنج پایەکەی ئیسلام، و یەکەم کەس بیت بگەیتە خاڵی کۆتایی بە زۆرترین خاڵەوە.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

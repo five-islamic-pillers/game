@@ -3,6 +3,8 @@ import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward,
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { BRAINTEASERS, GUESS_CARDS, type Difficulty, type CardTypes } from './data/cards';
+import boardImage from './assets/board.jpg';
+import bgImage from './assets/bg.png';
 
 interface Player {
   id: string;
@@ -610,7 +612,7 @@ export default function App() {
   };
 
   const boardStyle = {
-    backgroundImage: "url('./board.jpg')",
+    backgroundImage: `url(${boardImage})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -947,9 +949,9 @@ export default function App() {
           <header 
             className="relative w-full overflow-hidden min-h-[500px] flex items-center bg-stone-100"
             style={{ 
-              backgroundImage: "url('./bg.png')", 
+              backgroundImage: `url(${bgImage})`, 
               backgroundSize: 'cover', 
-              backgroundPosition: 'center',
+              backgroundPosition: 'center', 
               backgroundRepeat: 'no-repeat'
             }}
           >
@@ -961,7 +963,7 @@ export default function App() {
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-700 to-amber-600">پێنج پایەکەی ئیسلام</span>
                 </h1>
                 <p className="text-xl md:text-2xl font-medium text-stone-700 mb-10 leading-relaxed">
-                  ڕێگایەکی فێربوونی پڕ لە خۆشی بۆ هەموو خێزانەکە. زانیارییەکانت دەربارەی ئیسلام تاقی بکەرەوە!
+                  ئامانجی یارییەکە ئەوەیە وەڵامی ڕاستی پرسیارەکان بدەیتەوە، فێرببیت دەربارەی پێنج پایەکەی ئیسلام، و یەکەم کەس بیت بگەیتە خاڵی کۆتایی بە زۆرترین خاڵەوە.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <button 
@@ -1046,7 +1048,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold text-stone-800 mb-3">ئامانجی یاری</h3>
-                    <p className="text-stone-600 leading-relaxed text-lg font-medium">ئامانجی یارییەکە ئەوەیە وەڵامی ڕاستی پرسیارەکان بدەیتەوە، فێرببیت دەربارەی پێنج پایەی ئیسلام، و یەکەم کەس بیت بگەیتە خاڵی کۆتایی بە زۆرترین خاڵەوە.</p>
+                    <p className="text-stone-600 leading-relaxed text-lg font-medium">ئامانجی یارییەکە ئەوەیە وەڵامی ڕاستی پرسیارەکان بدەیتەوە، فێرببیت دەربارەی پێنج پایەکەی ئیسلام، و یەکەم کەس بیت بگەیتە خاڵی کۆتایی بە زۆرترین خاڵەوە.</p>
                   </div>
                 </div>
 
