@@ -327,7 +327,7 @@ export default function App() {
       setGameState('playing');
       setCurrentPlayerIndex(Math.floor(Math.random() * players.length));
       setTurnPhase('choose_card');
-      setTimeLeft(15);
+      setTimeLeft(30);
     }
   };
 
@@ -359,7 +359,7 @@ export default function App() {
     }
     
     setTurnPhase('reading_card');
-    setTimeLeft(15);
+    setTimeLeft(30);
   };
 
   const handleAnswer = (isCorrect: boolean) => {
@@ -435,7 +435,7 @@ export default function App() {
     setActiveCardType(null);
     setActiveCardData(null);
     setSpecialEffectData(null);
-    setTimeLeft(15);
+    setTimeLeft(30);
   };
 
   const handleMovePlayer = async () => {
@@ -531,7 +531,7 @@ export default function App() {
           setTurnPhase('choose_card');
           setDiceValue(null);
           setSpecialEffectData(null);
-          setTimeLeft(15);
+          setTimeLeft(30);
       } else {
           nextTurn(specialEffectData.skipTurn);
       }
@@ -584,7 +584,7 @@ export default function App() {
     setUsedGuessCards([]);
     setCurrentPlayerIndex(0);
     setTurnPhase('choose_card');
-    setTimeLeft(15);
+    setTimeLeft(30);
     setDiceValue(null);
     setActiveCardType(null);
     setActiveCardData(null);
