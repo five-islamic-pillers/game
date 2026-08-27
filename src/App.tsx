@@ -1081,7 +1081,7 @@ export default function App() {
           {/* Footer */}
           <footer className="py-8 bg-stone-100 text-center text-stone-500 text-sm font-bold border-t border-stone-200">
             <div className="container mx-auto px-6">
-              <p>Made by Meer Salah Mhohamed Fateh, Copyright 2026</p>
+              <p>درئستکراوە لەلایەن میر صڵاح بۆ کەناڵی ئافەرین , Copyright 2026</p>
             </div>
           </footer>
           
