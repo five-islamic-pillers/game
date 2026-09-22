@@ -10,6 +10,26 @@ export interface Player {
 export type GameDifficulty = 'easy' | 'medium' | 'hard';
 export type CardTypes = 'both' | 'brainteaser' | 'guess';
 
+export type GameLogActionType = 
+  | 'roll' 
+  | 'answer_correct' 
+  | 'answer_wrong' 
+  | 'move' 
+  | 'draw_card' 
+  | 'special' 
+  | 'win' 
+  | 'game_start';
+
+export interface GameLogEntry {
+  id: string;
+  playerName?: string;
+  playerColor?: string;
+  type: GameLogActionType;
+  text: string;
+  details?: string | number;
+  timestamp: number;
+}
+
 export interface OnlineRoomData {
   roomCode: string;
   hostId: string;
@@ -27,5 +47,6 @@ export interface OnlineRoomData {
   winningPlayers: Player[];
   gameDifficulty: GameDifficulty;
   cardTypesAllowed: CardTypes;
+  gameLogs?: GameLogEntry[];
   updatedAt: number;
 }

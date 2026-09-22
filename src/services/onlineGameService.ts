@@ -56,6 +56,12 @@ export async function createOnlineRoom(
     winningPlayers: [],
     gameDifficulty: difficulty,
     cardTypesAllowed,
+    gameLogs: [{
+      id: `start-${Date.now()}`,
+      type: 'game_start',
+      text: 'ژووری ئۆنلاین دروستکرا',
+      timestamp: Date.now()
+    }],
     updatedAt: Date.now()
   };
 

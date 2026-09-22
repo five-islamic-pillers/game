@@ -7,8 +7,9 @@ import boardImage from './assets/board.jpg';
 import bgImage from './assets/bg.png';
 import { AndroidDownloadModal } from './components/AndroidDownloadModal';
 import { OnlineLobbyModal } from './components/OnlineLobbyModal';
+import { GameLog } from './components/GameLog';
 import { subscribeToRoom, updateOnlineRoomState } from './services/onlineGameService';
-import type { OnlineRoomData } from './types';
+import type { OnlineRoomData, GameLogEntry, GameLogActionType } from './types';
 
 interface Player {
   id: string;
@@ -229,6 +230,9 @@ export default function App() {
   const [usedBrainteasers, setUsedBrainteasers] = useState<number[]>([]);
   const [usedGuessCards, setUsedGuessCards] = useState<number[]>([]);
   
+  // Game Actions Log (for immediate feedback)
+  const [gameLogs, setGameLogs] = useState<GameLogEntry[]>([]);
+
   // Dice and Animation State
   const [diceValue, setDiceValue] = useState<number | null>(null);
   const [isRolling, setIsRolling] = useState(false);
@@ -332,6 +336,9 @@ export default function App() {
       setTimeLeft(roomData.timeLeft);
       setDiceValue(roomData.diceValue);
       setSpecialEffectData(roomData.specialEffectData || null);
+      if (roomData.gameLogs && Array.isArray(roomData.gameLogs)) {
+        setGameLogs(roomData.gameLogs);
+      }
       if (roomData.winningPlayers && roomData.winningPlayers.length > 0) {
         setWinningPlayers(roomData.winningPlayers);
         handleWin(roomData.winningPlayers);
@@ -352,6 +359,33 @@ export default function App() {
   // Helper checking if current player is allowed to make turn moves
   const isMyTurn = !onlineRoomCode || (players[currentPlayerIndex]?.id === myOnlinePlayerId);
 
+  // Helper to add game log entry and sync
+  const addGameLog = (
+    type: GameLogActionType,
+    text: string,
+    playerName?: string,
+    playerColor?: string,
+    details?: string | number
+  ) => {
+    const newEntry: GameLogEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      type,
+      text,
+      playerName,
+      playerColor,
+      details,
+      timestamp: Date.now()
+    };
+
+    setGameLogs(prev => {
+      const updated = [...prev.slice(-19), newEntry];
+      if (onlineRoomCode) {
+        syncOnlineRoom({ gameLogs: updated });
+      }
+      return updated;
+    });
+  };
+
   // Online Game start callback from OnlineLobbyModal
   const handleOnlineGameStart = (roomCode: string, myPlayerId: string, initialRoom: OnlineRoomData) => {
     setOnlineRoomCode(roomCode);
@@ -363,6 +397,12 @@ export default function App() {
     setGameDifficulty(initialRoom.gameDifficulty || 'medium');
     setCardTypesAllowed(initialRoom.cardTypesAllowed || 'both');
     setTimeLeft(initialRoom.timeLeft ?? 30);
+    setGameLogs(initialRoom.gameLogs || [{
+      id: `start-${Date.now()}`,
+      type: 'game_start',
+      text: 'یاری ئۆنلاین دەستیپێکرد! بەختی باش بۆ هەمووان.',
+      timestamp: Date.now()
+    }]);
     setShowOnlineLobby(false);
     setGameState('playing');
   };
@@ -399,9 +439,28 @@ export default function App() {
     if (players.length >= 2) {
       SoundManager.init();
       setGameState('playing');
-      setCurrentPlayerIndex(Math.floor(Math.random() * players.length));
+      const startIdx = Math.floor(Math.random() * players.length);
+      setCurrentPlayerIndex(startIdx);
       setTurnPhase('choose_card');
       setTimeLeft(30);
+
+      const initialLogs: GameLogEntry[] = [
+        {
+          id: `start-${Date.now()}`,
+          type: 'game_start',
+          text: 'یاری دەستیپێکرد! بەختی باش بۆ هەمووان.',
+          timestamp: Date.now()
+        },
+        {
+          id: `turn-0-${Date.now() + 1}`,
+          type: 'draw_card',
+          playerName: players[startIdx].name,
+          playerColor: players[startIdx].color,
+          text: 'یەکەم نۆرەی یارییە',
+          timestamp: Date.now() + 1
+        }
+      ];
+      setGameLogs(initialLogs);
     }
   };
 
@@ -438,6 +497,16 @@ export default function App() {
     setTurnPhase('reading_card');
     setTimeLeft(30);
 
+    const currentP = playersRef.current[currentPlayerIndexRef.current] || players[currentPlayerIndex];
+    if (currentP) {
+      addGameLog(
+        'draw_card',
+        type === 'brainteaser' ? 'کارتی هەڵبژاردنی ڕاکێشا' : 'کارتی زانینی ڕاکێشا',
+        currentP.name,
+        currentP.color
+      );
+    }
+
     syncOnlineRoom({
       activeCardType: type,
       activeCardData: chosenCard,
@@ -450,8 +519,18 @@ export default function App() {
 
   const handleAnswer = (isCorrect: boolean) => {
     setTimeLeft(null);
+    const currentP = playersRef.current[currentPlayerIndexRef.current] || players[currentPlayerIndex];
+
     if (isCorrect) {
       SoundManager.correct();
+      if (currentP) {
+        addGameLog(
+          'answer_correct',
+          'بە دروستی وەڵامی دایەوە (+١ خاڵ)',
+          currentP.name,
+          currentP.color
+        );
+      }
       let updatedPlayers = [...players];
       updatedPlayers[currentPlayerIndex] = {
         ...updatedPlayers[currentPlayerIndex],
@@ -466,6 +545,14 @@ export default function App() {
       });
     } else {
       SoundManager.wrong();
+      if (currentP) {
+        addGameLog(
+          'answer_wrong',
+          'وەڵامەکەی هەڵە بوو',
+          currentP.name,
+          currentP.color
+        );
+      }
       nextTurn();
     }
   };
@@ -483,6 +570,16 @@ export default function App() {
         clearInterval(rollInterval);
         setIsRolling(false);
         setTurnPhase('moving');
+        const currentP = playersRef.current[currentPlayerIndexRef.current] || players[currentPlayerIndex];
+        if (currentP) {
+          addGameLog(
+            'roll',
+            `زاری فڕێدا: ${val}`,
+            currentP.name,
+            currentP.color,
+            val
+          );
+        }
         syncOnlineRoom({
           diceValue: val,
           turnPhase: 'moving'
@@ -588,7 +685,21 @@ export default function App() {
 
     setIsMoving(false);
 
+    addGameLog(
+      'move',
+      `جوڵا بۆ خانەی ${targetPos}`,
+      player.name,
+      player.color,
+      targetPos
+    );
+
     if (message) {
+      addGameLog(
+        'special',
+        message,
+        player.name,
+        player.color
+      );
       setSpecialEffectData({ specialMove, extraTurn, skipTurn, message });
       setTurnPhase('special_effect');
       syncOnlineRoom({
@@ -628,6 +739,13 @@ export default function App() {
               });
           }
           setIsMoving(false);
+          addGameLog(
+            'special',
+            `بەهۆی کاریگەرییەوە گەیشتە خانەی ${targetPos}`,
+            player.name,
+            player.color,
+            targetPos
+          );
       }
       
       if (targetPos >= 90) {
@@ -653,6 +771,22 @@ export default function App() {
     setWinningPlayers(winners);
     SoundManager.win();
     
+    if (winners.length === 1) {
+      addGameLog(
+        'win',
+        'گەیشتە کۆتایی و یارییەکەی بردەوە! 🏆',
+        winners[0].name,
+        winners[0].color
+      );
+    } else {
+      addGameLog(
+        'win',
+        `یاری کۆتایی هات! براوەکان: ${winners.map(w => w.name).join('، ')}`,
+        undefined,
+        undefined
+      );
+    }
+
     syncOnlineRoom({
       winningPlayers: winners,
       status: 'finished',
@@ -710,6 +844,13 @@ export default function App() {
     setClueIndex(0);
     setSpecialEffectData(null);
     setWinningPlayers([]);
+    const initialLogs: GameLogEntry[] = [{
+      id: `restart-${Date.now()}`,
+      type: 'game_start',
+      text: 'یاری نوێ دەستیپێکردەوە!',
+      timestamp: Date.now()
+    }];
+    setGameLogs(initialLogs);
     setGameState('playing');
 
     syncOnlineRoom({
@@ -724,7 +865,8 @@ export default function App() {
       showGuessAnswer: false,
       clueIndex: 0,
       specialEffectData: null,
-      winningPlayers: []
+      winningPlayers: [],
+      gameLogs: initialLogs
     });
   };
 
@@ -735,6 +877,7 @@ export default function App() {
     setPlayers([]);
     setUsedBrainteasers([]);
     setUsedGuessCards([]);
+    setGameLogs([]);
     setOnlineRoomCode(null);
     setMyOnlinePlayerId(null);
     setIsOnlineHost(false);
@@ -1081,6 +1224,11 @@ export default function App() {
 
               </motion.div>
             </AnimatePresence>
+          </div>
+
+          {/* 4. Small Game Log Component (At the bottom of the board area) */}
+          <div className="absolute bottom-[268px] left-3 right-3 md:bottom-4 md:right-4 md:left-auto md:w-[320px] z-30">
+            <GameLog logs={gameLogs} />
           </div>
         </div>
       )}

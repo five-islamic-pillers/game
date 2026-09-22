@@ -1,0 +1,192 @@
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  ScrollText, 
+  Dices, 
+  CheckCircle2, 
+  XCircle, 
+  FastForward, 
+  Sparkles, 
+  Trophy, 
+  Brain, 
+  HelpCircle, 
+  ChevronDown, 
+  ChevronUp,
+  Activity
+} from 'lucide-react';
+import type { GameLogEntry, GameLogActionType } from '../types';
+
+interface GameLogProps {
+  logs: GameLogEntry[];
+  className?: string;
+}
+
+const getActionIcon = (type: GameLogActionType) => {
+  switch (type) {
+    case 'roll':
+      return <Dices className="w-3.5 h-3.5 text-indigo-600" />;
+    case 'answer_correct':
+      return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />;
+    case 'answer_wrong':
+      return <XCircle className="w-3.5 h-3.5 text-rose-600" />;
+    case 'move':
+      return <FastForward className="w-3.5 h-3.5 text-sky-600" />;
+    case 'draw_card':
+      return <HelpCircle className="w-3.5 h-3.5 text-amber-600" />;
+    case 'special':
+      return <Sparkles className="w-3.5 h-3.5 text-purple-600" />;
+    case 'win':
+      return <Trophy className="w-3.5 h-3.5 text-amber-500" />;
+    case 'game_start':
+    default:
+      return <Activity className="w-3.5 h-3.5 text-stone-500" />;
+  }
+};
+
+const getActionBg = (type: GameLogActionType) => {
+  switch (type) {
+    case 'roll':
+      return 'bg-indigo-50 border-indigo-100 text-indigo-950';
+    case 'answer_correct':
+      return 'bg-emerald-50 border-emerald-100 text-emerald-950';
+    case 'answer_wrong':
+      return 'bg-rose-50 border-rose-100 text-rose-950';
+    case 'move':
+      return 'bg-sky-50 border-sky-100 text-sky-950';
+    case 'draw_card':
+      return 'bg-amber-50 border-amber-100 text-amber-950';
+    case 'special':
+      return 'bg-purple-50 border-purple-100 text-purple-950';
+    case 'win':
+      return 'bg-amber-50 border-amber-200 text-amber-950';
+    case 'game_start':
+    default:
+      return 'bg-stone-50 border-stone-100 text-stone-900';
+  }
+};
+
+export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  // Take the last 5 actions (most recent first)
+  const displayLogs = logs.slice(-5).reverse();
+  const latestLog = displayLogs[0];
+
+  if (!logs || logs.length === 0) {
+    return null;
+  }
+
+  return (
+    <div 
+      id="game-log-panel" 
+      className={`z-30 pointer-events-auto transition-all duration-200 ${className}`}
+    >
+      <div className="bg-white/95 backdrop-blur-2xl border border-stone-200 shadow-xl rounded-2xl overflow-hidden">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between px-3.5 py-2 md:py-2.5 bg-stone-50/80 border-b border-stone-100 select-none">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <div className="flex items-center gap-1.5 text-xs font-black text-stone-800">
+              <ScrollText className="w-3.5 h-3.5 text-stone-600" />
+              <span>تۆماری یاری</span>
+            </div>
+            <span className="text-[10px] font-bold text-stone-600 bg-stone-200/80 px-1.5 py-0.2 rounded-full">
+              {logs.length}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            title={isExpanded ? 'کەمکردنەوە' : 'فراوانکردن'}
+            className="p-1 text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 rounded-lg transition-colors cursor-pointer"
+          >
+            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {/* Log Entries */}
+        <AnimatePresence initial={false}>
+          {isExpanded ? (
+            <motion.div
+              key="expanded"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="p-2 space-y-1.5 max-h-[160px] md:max-h-[190px] overflow-y-auto"
+            >
+              {displayLogs.map((log, index) => (
+                <motion.div
+                  key={log.id}
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.2, delay: index === 0 ? 0 : 0.03 }}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-medium ${getActionBg(log.type)} ${
+                    index === 0 ? 'ring-1 ring-stone-300/80 shadow-xs' : 'opacity-90'
+                  }`}
+                >
+                  <div className="shrink-0 p-1 bg-white rounded-lg shadow-2xs border border-stone-100 flex items-center justify-center">
+                    {getActionIcon(log.type)}
+                  </div>
+
+                  {log.playerColor && (
+                    <span 
+                      className={`w-2 h-2 rounded-full shrink-0 shadow-xs ${log.playerColor}`}
+                      title={log.playerName}
+                    />
+                  )}
+
+                  <div className="flex-1 truncate leading-tight">
+                    {log.playerName && (
+                      <span className="font-black text-stone-900 ml-1">
+                        {log.playerName}:
+                      </span>
+                    )}
+                    <span className="font-semibold">{log.text}</span>
+                  </div>
+
+                  {index === 0 && (
+                    <span className="text-[9px] font-black uppercase text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded-full shrink-0">
+                      تازە
+                    </span>
+                  )}
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : latestLog ? (
+            /* Minimized single-line ticker view */
+            <motion.div
+              key="collapsed"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsExpanded(true)}
+              className="px-3 py-1.5 flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-50 transition-colors"
+            >
+              <div className="shrink-0 p-0.5">
+                {getActionIcon(latestLog.type)}
+              </div>
+              {latestLog.playerColor && (
+                <span className={`w-2 h-2 rounded-full shrink-0 ${latestLog.playerColor}`} />
+              )}
+              <div className="flex-1 truncate font-medium text-stone-700">
+                {latestLog.playerName && (
+                  <span className="font-black text-stone-900 ml-1">
+                    {latestLog.playerName}:
+                  </span>
+                )}
+                <span>{latestLog.text}</span>
+              </div>
+              <span className="text-[9px] font-bold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded-full">
+                دواهەمین
+              </span>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+};
