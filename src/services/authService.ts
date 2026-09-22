@@ -38,6 +38,24 @@ export type AuthUser = User | SavedUserSession;
 const SESSION_COOKIE_NAME = 'fourpieces_user_session';
 const EMAIL_COOKIE_NAME = 'fourpieces_last_email';
 const NAME_COOKIE_NAME = 'fourpieces_player_name';
+const HIDE_PHOTO_KEY = 'fourpieces_hide_profile_photo';
+
+export function isProfilePhotoHidden(): boolean {
+  try {
+    return localStorage.getItem(HIDE_PHOTO_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setProfilePhotoHidden(hidden: boolean): void {
+  try {
+    localStorage.setItem(HIDE_PHOTO_KEY, hidden ? 'true' : 'false');
+    if (currentActiveUser) {
+      notifyListeners(currentActiveUser);
+    }
+  } catch {}
+}
 
 const authListeners: Set<(user: AuthUser | null) => void> = new Set();
 let currentActiveUser: AuthUser | null = null;

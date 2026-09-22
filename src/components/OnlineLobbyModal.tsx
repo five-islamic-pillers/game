@@ -43,6 +43,8 @@ import {
   logoutUser, 
   subscribeToAuth, 
   getSavedUserSession,
+  isProfilePhotoHidden,
+  setProfilePhotoHidden,
   type AuthUser 
 } from '../services/authService';
 import { sendAccountCreationOtp, verifyAccountCreationOtp } from '../services/otpService';
@@ -599,12 +601,12 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
           /* User Profile Banner */
             <div className="mb-4 p-2.5 bg-stone-800/90 border border-stone-700/80 rounded-2xl flex items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-2.5 overflow-hidden">
-                {currentUser.photoURL ? (
+                {currentUser.photoURL && !isProfilePhotoHidden() ? (
                   <img 
                     src={currentUser.photoURL} 
                     alt="User" 
                     referrerPolicy="no-referrer"
-                    className="w-8 h-8 rounded-full border border-amber-400 shrink-0" 
+                    className="w-8 h-8 rounded-full border border-amber-400 shrink-0 object-cover" 
                   />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center font-black text-xs shrink-0">

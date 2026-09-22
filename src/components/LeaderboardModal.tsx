@@ -5,6 +5,7 @@ import {
   getMostWinsLeaderboard, 
   type LeaderboardPlayer 
 } from '../services/leaderboardService';
+import { isProfilePhotoHidden } from '../services/authService';
 import { SoundManager } from '../utils/sound';
 
 interface LeaderboardModalProps {
@@ -196,7 +197,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                     {rankBadge}
                     
                     <div className="w-9 h-9 rounded-xl bg-stone-200 dark:bg-stone-700/60 border border-stone-300 dark:border-stone-600/50 flex items-center justify-center overflow-hidden shrink-0 text-amber-600 dark:text-amber-400 font-bold">
-                      {player.photoURL ? (
+                      {player.photoURL && (!isCurrentUser || !isProfilePhotoHidden()) ? (
                         <img 
                           src={player.photoURL} 
                           alt={player.displayName} 

@@ -103,11 +103,22 @@ export async function joinOnlineRoom(
   }
 
   const data = snap.data() as OnlineRoomData;
+  const existingPlayer = data.players?.find(
+    p => p.name.trim().toLowerCase() === playerName.trim().toLowerCase()
+  );
+
   if (data.status !== 'lobby') {
+    if (existingPlayer) {
+      return { playerId: existingPlayer.id, roomData: data };
+    }
     return { error: 'ئەم یارییە پێشتر دەستی پێکردووە.' };
   }
 
-  if (data.players.length >= 6) {
+  if (existingPlayer) {
+    return { playerId: existingPlayer.id, roomData: data };
+  }
+
+  if (data.players && data.players.length >= 6) {
     return { error: 'ژوورەکە پڕ بووە (زۆرترین ٦ یاریزان).' };
   }
 

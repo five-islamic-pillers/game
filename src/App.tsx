@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff, Menu, Sun, Moon } from 'lucide-react';
+import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff, Menu, Sun, Moon, ExternalLink, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { BRAINTEASERS, GUESS_CARDS, type Difficulty, type CardTypes } from './data/cards';
@@ -9,6 +9,7 @@ import { AndroidDownloadModal } from './components/AndroidDownloadModal';
 import { OnlineLobbyModal } from './components/OnlineLobbyModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
 import { HeaderNavDrawer } from './components/HeaderNavDrawer';
+import { RulesModal } from './components/RulesModal';
 import { GameLog } from './components/GameLog';
 import { ReactionsOverlay } from './components/ReactionsOverlay';
 import { subscribeToRoom, updateOnlineRoomState, sendOnlineReaction } from './services/onlineGameService';
@@ -144,6 +145,7 @@ export default function App() {
   const [gameDifficulty, setGameDifficulty] = useState<Difficulty>('medium');
   const [cardTypesAllowed, setCardTypesAllowed] = useState<CardTypes>('both');
   const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
   const [showNavDrawer, setShowNavDrawer] = useState(false);
 
   // Online Multiplayer States
@@ -282,15 +284,27 @@ export default function App() {
     const unsubscribe = subscribeToRoom(onlineRoomCode, (roomData) => {
       if (!roomData) return;
 
-      if (roomData.status === 'playing' && gameState !== 'playing') {
-        setGameState('playing');
-      } else if (roomData.status === 'finished' && gameState !== 'finished') {
-        setGameState('finished');
+      if (roomData.status === 'playing') {
+        if (gameState !== 'playing') setGameState('playing');
+      } else if (roomData.status === 'finished') {
+        if (roomData.winningPlayers && roomData.winningPlayers.length > 0) {
+          setWinningPlayers(roomData.winningPlayers);
+        } else {
+          // Room was ended or disbanded
+          setGameState('landing');
+          setOnlineRoomCode(null);
+        }
       }
 
-      setPlayers(roomData.players || []);
-      setCurrentPlayerIndex(roomData.currentPlayerIndex ?? 0);
-      setTurnPhase(roomData.turnPhase || 'choose_card');
+      if (roomData.players && roomData.players.length > 0) {
+        setPlayers(roomData.players);
+      }
+      if (typeof roomData.currentPlayerIndex === 'number') {
+        setCurrentPlayerIndex(roomData.currentPlayerIndex);
+      }
+      if (roomData.turnPhase) {
+        setTurnPhase(roomData.turnPhase);
+      }
       setActiveCardType(roomData.activeCardType || null);
       setActiveCardData(roomData.activeCardData || null);
       setShowGuessAnswer(roomData.showGuessAnswer ?? false);
@@ -1130,10 +1144,10 @@ export default function App() {
                 exit={{ y: 20, opacity: 0 }}
                 className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-2xl p-2.5 sm:p-3 md:p-6 md:rounded-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.08)] md:shadow-2xl border-t md:border border-stone-200 dark:border-stone-800 text-center relative overflow-hidden h-auto max-h-[150px] md:max-h-none transition-colors"
               >
-                <div className={`absolute top-0 left-0 w-full h-1 md:h-2 ${players[currentPlayerIndex].color}`} />
+                <div className={`absolute top-0 left-0 w-full h-1 md:h-2 ${players[currentPlayerIndex]?.color || 'bg-amber-600'}`} />
                 <div className="flex items-center justify-center gap-2 mb-1 mt-0.5">
                   <span className="text-[10px] md:text-xs font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wider">نۆرەی یاریزان</span>
-                  <span className="text-xs md:text-base font-black text-stone-900 dark:text-stone-100 truncate max-w-[120px] md:max-w-[180px]">{players[currentPlayerIndex].name}</span>
+                  <span className="text-xs md:text-base font-black text-stone-900 dark:text-stone-100 truncate max-w-[120px] md:max-w-[180px]">{players[currentPlayerIndex]?.name || 'یاریزان'}</span>
                   {onlineRoomCode && (
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isMyTurn ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 animate-pulse' : 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400'}`}>
                       {isMyTurn ? 'نۆرەی تۆیە!' : 'چاوەڕێ بە...'}
@@ -1352,28 +1366,47 @@ export default function App() {
           >
             <div className="absolute inset-0 bg-white/40 dark:bg-black/65 backdrop-blur-[2px] transition-colors"></div>
             <div className="container mx-auto px-6 relative z-10 flex flex-col md:flex-row items-center justify-between">
-              <div className="md:w-1/2 max-w-xl py-16">
-                <h1 className="text-5xl md:text-6xl font-black text-stone-900 dark:text-stone-100 mb-6 leading-tight flex flex-col gap-2">
+              <div className="md:w-3/5 max-w-2xl py-12 md:py-16">
+                <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-stone-900 dark:text-stone-100 mb-6 leading-tight flex flex-col gap-2">
                   <span>یاری خێزانی</span>
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-700 via-amber-600 to-amber-500">پێنج پایەکەی ئیسلام</span>
                 </h1>
-                <p className="text-xl md:text-2xl font-medium text-stone-700 dark:text-stone-300 mb-10 leading-relaxed">
+                <p className="text-lg sm:text-xl md:text-2xl font-medium text-stone-700 dark:text-stone-300 mb-8 md:mb-10 leading-relaxed">
                   ئامانجی یارییەکە ئەوەیە وەڵامی ڕاستی پرسیارەکان بدەیتەوە، فێرببیت دەربارەی پێنج پایەکەی ئیسلام، و یەکەم کەس بیت بگەیتە خاڵی کۆتایی بە زۆرترین خاڵەوە.
                 </p>
-                <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3.5 max-w-fit">
                   <button 
-                    onClick={() => setGameState('setup')}
-                    className="px-8 py-4 bg-red-700 hover:bg-red-800 text-white text-lg font-bold rounded-xl transition-all shadow-lg shadow-red-700/20 flex items-center justify-center gap-2 cursor-pointer"
+                    type="button"
+                    onClick={() => {
+                      SoundManager.click();
+                      setGameState('setup');
+                    }}
+                    className="px-5 sm:px-6 py-3.5 sm:py-4 bg-red-700 hover:bg-red-800 active:scale-95 text-white text-sm sm:text-base md:text-lg font-bold rounded-xl transition-all shadow-lg shadow-red-700/20 flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
                   >
-                    <Gamepad2 className="w-5 h-5" />
-                    یاریکردنی ناوخۆیی
+                    <Gamepad2 className="w-5 h-5 shrink-0" />
+                    <span>یاریکردنی ناوخۆیی</span>
                   </button>
                   <button 
-                    onClick={() => setShowOnlineLobby(true)}
-                    className="px-8 py-4 bg-sky-600 hover:bg-sky-700 text-white text-lg font-bold rounded-xl transition-all shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                    type="button"
+                    onClick={() => {
+                      SoundManager.click();
+                      setShowOnlineLobby(true);
+                    }}
+                    className="px-5 sm:px-6 py-3.5 sm:py-4 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-sm sm:text-base md:text-lg font-bold rounded-xl transition-all shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
                   >
-                    <Globe2 className="w-5 h-5" />
-                    یاریکردنی ئۆنلاین
+                    <Globe2 className="w-5 h-5 shrink-0" />
+                    <span>یاریکردنی ئۆنلاین</span>
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      SoundManager.click();
+                      setShowRulesModal(true);
+                    }}
+                    className="px-5 sm:px-6 py-3.5 sm:py-4 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-sm sm:text-base md:text-lg font-bold rounded-xl transition-all shadow-lg shadow-amber-600/20 flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+                  >
+                    <BookOpen className="w-5 h-5 shrink-0" />
+                    <span>یاساکانی یاری</span>
                   </button>
                 </div>
               </div>
@@ -1430,8 +1463,17 @@ export default function App() {
 
           {/* Footer */}
           <footer className="py-8 bg-stone-100 dark:bg-stone-900 text-center text-stone-500 dark:text-stone-400 text-sm font-bold border-t border-stone-200 dark:border-stone-800 transition-colors">
-            <div className="container mx-auto px-6">
-              <p>دروسکراوە لەلایەن میر صڵاح بۆ کەناڵی ئافەرین , Copyright 2026</p>
+            <div className="container mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p>دروستکراوە لەلایەن میر صڵاح بۆ کەناڵی ئافەرین , Copyright 2026</p>
+              <a 
+                href="https://docs.google.com/forms/d/e/1FAIpQLSf97Y6co7TdU19T5IHrzI4PEeHFozeskRfHImQsahewxVHsag/viewform?usp=publish-editor"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 hover:text-red-600 dark:hover:text-red-400 hover:underline font-bold transition-colors"
+              >
+                <span>ڕاپۆرتکردنی کێشە لە یاری</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
             </div>
           </footer>
           
@@ -1757,9 +1799,16 @@ export default function App() {
         onOpenLeaderboard={() => setShowLeaderboardModal(true)}
         onOpenOnlineLobby={() => setShowOnlineLobby(true)}
         onPlayLocal={() => setGameState('setup')}
+        onOpenRules={() => setShowRulesModal(true)}
         onOpenAndroidModal={() => setShowAndroidModal(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
+      />
+
+      {/* Game Rules Modal */}
+      <RulesModal
+        isOpen={showRulesModal}
+        onClose={() => setShowRulesModal(false)}
       />
 
       {/* Leaderboard Modal (Most Wins & Most Played) */}
