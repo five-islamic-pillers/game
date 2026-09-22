@@ -1,0 +1,29 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Online Game Room",
+      "description": "Represents an active online game session with synchronized board state, players, dice, and turn",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string", "description": "4 to 6 digit room code for players to join" },
+        "hostId": { "type": "string", "description": "Player ID who created the room" },
+        "status": { "type": "string", "enum": ["lobby", "playing", "ended"], "description": "Game status" },
+        "players": { "type": "string", "description": "JSON encoded string of player objects" },
+        "currentPlayerIndex": { "type": "number", "description": "Index of player whose turn it is" },
+        "turnPhase": { "type": "string", "description": "Current turn phase" },
+        "activeCard": { "type": "string", "description": "JSON encoded active question card" },
+        "diceValue": { "type": "number", "description": "Current dice value" },
+        "timerRemaining": { "type": "number", "description": "Seconds left on turn timer" },
+        "winnerInfo": { "type": "string", "description": "JSON encoded winner details" },
+        "updatedAt": { "type": "number", "description": "Epoch timestamp of last update" }
+      },
+      "required": ["roomCode", "hostId", "status", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Public lobby and active game sessions"
+    }
+  }
+}

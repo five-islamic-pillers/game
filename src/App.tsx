@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, ScrollText, Gamepad2, SkipForward } from 'lucide-react';
+import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, ScrollText, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { BRAINTEASERS, GUESS_CARDS, type Difficulty, type CardTypes } from './data/cards';
 import boardImage from './assets/board.jpg';
 import bgImage from './assets/bg.png';
+import { AndroidDownloadModal } from './components/AndroidDownloadModal';
+import { OnlineLobbyModal } from './components/OnlineLobbyModal';
+import { subscribeToRoom, updateOnlineRoomState } from './services/onlineGameService';
+import type { OnlineRoomData } from './types';
 
 interface Player {
   id: string;
@@ -201,9 +205,17 @@ export default function App() {
   const [showEndModal, setShowEndModal] = useState(false);
   const [winningPlayers, setWinningPlayers] = useState<Player[]>([]);
   const [landingCardInfoPopup, setLandingCardInfoPopup] = useState<'brainteaser' | 'guess' | null>(null);
+  const [showAndroidModal, setShowAndroidModal] = useState(false);
   const [specialEffectData, setSpecialEffectData] = useState<any>(null);
   const [gameDifficulty, setGameDifficulty] = useState<Difficulty>('medium');
   const [cardTypesAllowed, setCardTypesAllowed] = useState<CardTypes>('both');
+
+  // Online Multiplayer States
+  const [showOnlineLobby, setShowOnlineLobby] = useState(false);
+  const [onlineRoomCode, setOnlineRoomCode] = useState<string | null>(null);
+  const [myOnlinePlayerId, setMyOnlinePlayerId] = useState<string | null>(null);
+  const [isOnlineHost, setIsOnlineHost] = useState(false);
+  const [onlineConnected, setOnlineConnected] = useState(false);
   
   // Game Loop States
   const [turnPhase, setTurnPhase] = useState<'choose_card' | 'reading_card' | 'rolling_dice' | 'moving' | 'special_effect'>('choose_card');
@@ -293,6 +305,68 @@ export default function App() {
     }
   }, [timeLeft, turnPhase, activeCardType]);
 
+  // Online multiplayer Firestore subscription
+  useEffect(() => {
+    if (!onlineRoomCode) {
+      setOnlineConnected(false);
+      return;
+    }
+
+    setOnlineConnected(true);
+    const unsubscribe = subscribeToRoom(onlineRoomCode, (roomData) => {
+      if (!roomData) return;
+
+      if (roomData.status === 'playing' && gameState !== 'playing') {
+        setGameState('playing');
+      } else if (roomData.status === 'finished' && gameState !== 'finished') {
+        setGameState('finished');
+      }
+
+      setPlayers(roomData.players || []);
+      setCurrentPlayerIndex(roomData.currentPlayerIndex ?? 0);
+      setTurnPhase(roomData.turnPhase || 'choose_card');
+      setActiveCardType(roomData.activeCardType || null);
+      setActiveCardData(roomData.activeCardData || null);
+      setShowGuessAnswer(roomData.showGuessAnswer ?? false);
+      setClueIndex(roomData.clueIndex ?? 0);
+      setTimeLeft(roomData.timeLeft);
+      setDiceValue(roomData.diceValue);
+      setSpecialEffectData(roomData.specialEffectData || null);
+      if (roomData.winningPlayers && roomData.winningPlayers.length > 0) {
+        setWinningPlayers(roomData.winningPlayers);
+        handleWin(roomData.winningPlayers);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [onlineRoomCode]);
+
+  // Sync state helper to firestore if in online game and user is active player
+  const syncOnlineRoom = (updates: Partial<OnlineRoomData>) => {
+    if (!onlineRoomCode) return;
+    updateOnlineRoomState(onlineRoomCode, updates).catch(err => {
+      console.error("Failed to sync room state:", err);
+    });
+  };
+
+  // Helper checking if current player is allowed to make turn moves
+  const isMyTurn = !onlineRoomCode || (players[currentPlayerIndex]?.id === myOnlinePlayerId);
+
+  // Online Game start callback from OnlineLobbyModal
+  const handleOnlineGameStart = (roomCode: string, myPlayerId: string, initialRoom: OnlineRoomData) => {
+    setOnlineRoomCode(roomCode);
+    setMyOnlinePlayerId(myPlayerId);
+    setIsOnlineHost(initialRoom.hostId === myPlayerId);
+    setPlayers(initialRoom.players || []);
+    setCurrentPlayerIndex(initialRoom.currentPlayerIndex ?? 0);
+    setTurnPhase(initialRoom.turnPhase || 'choose_card');
+    setGameDifficulty(initialRoom.gameDifficulty || 'medium');
+    setCardTypesAllowed(initialRoom.cardTypesAllowed || 'both');
+    setTimeLeft(initialRoom.timeLeft ?? 30);
+    setShowOnlineLobby(false);
+    setGameState('playing');
+  };
+
   // Intro Sequence
   useEffect(() => {
     if (gameState === 'intro') {
@@ -336,6 +410,7 @@ export default function App() {
     setShowGuessAnswer(false);
     setClueIndex(0);
     
+    let chosenCard: any = null;
     if (type === 'brainteaser') {
       const allOfDiff = BRAINTEASERS.filter(c => c.difficulty === gameDifficulty);
       let available = allOfDiff.filter(c => !usedBrainteasers.includes(c.id));
@@ -346,6 +421,7 @@ export default function App() {
       const randomCard = available[Math.floor(Math.random() * available.length)];
       setUsedBrainteasers([...usedBrainteasers, randomCard.id]);
       setActiveCardData(randomCard);
+      chosenCard = randomCard;
     } else {
       const allOfDiff = GUESS_CARDS.filter(c => c.difficulty === gameDifficulty);
       let available = allOfDiff.filter(c => !usedGuessCards.includes(c.id));
@@ -356,25 +432,38 @@ export default function App() {
       const randomCard = available[Math.floor(Math.random() * available.length)];
       setUsedGuessCards([...usedGuessCards, randomCard.id]);
       setActiveCardData(randomCard);
+      chosenCard = randomCard;
     }
     
     setTurnPhase('reading_card');
     setTimeLeft(30);
+
+    syncOnlineRoom({
+      activeCardType: type,
+      activeCardData: chosenCard,
+      turnPhase: 'reading_card',
+      showGuessAnswer: false,
+      clueIndex: 0,
+      timeLeft: 30
+    });
   };
 
   const handleAnswer = (isCorrect: boolean) => {
     setTimeLeft(null);
     if (isCorrect) {
       SoundManager.correct();
-      setPlayers(prev => {
-        const newPlayers = [...prev];
-        newPlayers[currentPlayerIndex] = {
-          ...newPlayers[currentPlayerIndex],
-          score: newPlayers[currentPlayerIndex].score + 1
-        };
-        return newPlayers;
-      });
+      let updatedPlayers = [...players];
+      updatedPlayers[currentPlayerIndex] = {
+        ...updatedPlayers[currentPlayerIndex],
+        score: updatedPlayers[currentPlayerIndex].score + 1
+      };
+      setPlayers(updatedPlayers);
       setTurnPhase('rolling_dice');
+      syncOnlineRoom({
+        players: updatedPlayers,
+        turnPhase: 'rolling_dice',
+        timeLeft: null
+      });
     } else {
       SoundManager.wrong();
       nextTurn();
@@ -387,12 +476,17 @@ export default function App() {
     let rolls = 0;
     const rollInterval = setInterval(() => {
       SoundManager.roll();
-      setDiceValue(Math.floor(Math.random() * 6) + 1);
+      const val = Math.floor(Math.random() * 6) + 1;
+      setDiceValue(val);
       rolls++;
       if (rolls > 12) {
         clearInterval(rollInterval);
         setIsRolling(false);
         setTurnPhase('moving');
+        syncOnlineRoom({
+          diceValue: val,
+          turnPhase: 'moving'
+        });
       }
     }, 100);
   };
@@ -412,23 +506,19 @@ export default function App() {
        loops++;
     }
 
-    // 2. Safely update actual players array using functional updater to preserve position
-    setPlayers(prevPlayers => {
-      const newPlayers = prevPlayers.map(p => ({...p}));
-      if (skipCurrentPlayer) {
-        newPlayers[currentIdx].skipTurn = true;
-      }
-      
-      let nIdx = (currentIdx + 1) % newPlayers.length;
-      let lps = 0;
-      while (newPlayers[nIdx].skipTurn && lps < newPlayers.length) {
-         newPlayers[nIdx].skipTurn = false;
-         nIdx = (nIdx + 1) % newPlayers.length;
-         lps++;
-      }
-      return newPlayers;
-    });
+    let updatedPlayers = playersRef.current.map(p => ({...p}));
+    if (skipCurrentPlayer) {
+      updatedPlayers[currentIdx].skipTurn = true;
+    }
+    let nIdx = (currentIdx + 1) % updatedPlayers.length;
+    let lps = 0;
+    while (updatedPlayers[nIdx].skipTurn && lps < updatedPlayers.length) {
+       updatedPlayers[nIdx].skipTurn = false;
+       nIdx = (nIdx + 1) % updatedPlayers.length;
+       lps++;
+    }
 
+    setPlayers(updatedPlayers);
     setCurrentPlayerIndex(nextIdx);
     setTurnPhase('choose_card');
     setDiceValue(null);
@@ -436,6 +526,17 @@ export default function App() {
     setActiveCardData(null);
     setSpecialEffectData(null);
     setTimeLeft(30);
+
+    syncOnlineRoom({
+      players: updatedPlayers,
+      currentPlayerIndex: nextIdx,
+      turnPhase: 'choose_card',
+      diceValue: null,
+      activeCardType: null,
+      activeCardData: null,
+      specialEffectData: null,
+      timeLeft: 30
+    });
   };
 
   const handleMovePlayer = async () => {
@@ -490,6 +591,10 @@ export default function App() {
     if (message) {
       setSpecialEffectData({ specialMove, extraTurn, skipTurn, message });
       setTurnPhase('special_effect');
+      syncOnlineRoom({
+        specialEffectData: { specialMove, extraTurn, skipTurn, message },
+        turnPhase: 'special_effect'
+      });
     } else {
       if (targetPos >= 90) handleWin([playersRef.current[currentIdx]]);
       else nextTurn();
@@ -532,6 +637,12 @@ export default function App() {
           setDiceValue(null);
           setSpecialEffectData(null);
           setTimeLeft(30);
+          syncOnlineRoom({
+            turnPhase: 'choose_card',
+            diceValue: null,
+            specialEffectData: null,
+            timeLeft: 30
+          });
       } else {
           nextTurn(specialEffectData.skipTurn);
       }
@@ -542,6 +653,12 @@ export default function App() {
     setWinningPlayers(winners);
     SoundManager.win();
     
+    syncOnlineRoom({
+      winningPlayers: winners,
+      status: 'finished',
+      timeLeft: null
+    });
+
     stopConfetti();
 
     // Only launch confetti if there is a single winner (no tie)
@@ -579,7 +696,8 @@ export default function App() {
 
   const playAgain = () => {
     stopConfetti();
-    setPlayers(players.map(p => ({ ...p, position: 1, score: 0 })));
+    const restartedPlayers = players.map(p => ({ ...p, position: 1, score: 0 }));
+    setPlayers(restartedPlayers);
     setUsedBrainteasers([]);
     setUsedGuessCards([]);
     setCurrentPlayerIndex(0);
@@ -593,6 +711,21 @@ export default function App() {
     setSpecialEffectData(null);
     setWinningPlayers([]);
     setGameState('playing');
+
+    syncOnlineRoom({
+      players: restartedPlayers,
+      currentPlayerIndex: 0,
+      turnPhase: 'choose_card',
+      status: 'playing',
+      timeLeft: 30,
+      diceValue: null,
+      activeCardType: null,
+      activeCardData: null,
+      showGuessAnswer: false,
+      clueIndex: 0,
+      specialEffectData: null,
+      winningPlayers: []
+    });
   };
 
   const resetGame = () => {
@@ -602,6 +735,10 @@ export default function App() {
     setPlayers([]);
     setUsedBrainteasers([]);
     setUsedGuessCards([]);
+    setOnlineRoomCode(null);
+    setMyOnlinePlayerId(null);
+    setIsOnlineHost(false);
+    setOnlineConnected(false);
   };
 
   const scrollToRules = () => {
@@ -753,22 +890,71 @@ export default function App() {
           {/* 2. Top Leaderboard (Score Board) */}
           <div className="absolute top-0 left-0 right-0 md:top-4 md:left-auto md:right-4 md:w-[320px] z-40 bg-white/95 backdrop-blur-2xl border-b md:border border-stone-200 md:shadow-2xl md:rounded-2xl p-3 md:p-5 flex flex-col gap-2 h-[130px] md:h-auto md:max-h-none">
             <div className="flex items-center justify-between border-b border-stone-100 pb-2 md:pb-3 shrink-0">
-              <h2 className="text-base md:text-lg font-black text-stone-800">خاڵەکان</h2>
-              <button 
-                onClick={() => setShowEndModal(true)}
-                className="px-3 py-1.5 text-xs font-bold bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-              >
-                کۆتایی
-              </button>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base md:text-lg font-black text-stone-800">خاڵەکان</h2>
+                {onlineRoomCode && (
+                  <span className="flex items-center gap-1 text-[11px] font-black bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full border border-sky-200" title={`ژووری ئۆنلاین: ${onlineRoomCode}`}>
+                    <Globe2 className="w-3 h-3 text-sky-600 animate-spin" />
+                    <span>#{onlineRoomCode}</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button 
+                  id="board-download-android-btn"
+                  onClick={() => setShowAndroidModal(true)}
+                  title="داگرتنی ئەپی ئەندرۆید (APK)"
+                  className="px-2.5 py-1 text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>ئەپ</span>
+                </button>
+                <button 
+                  onClick={() => setShowEndModal(true)}
+                  className="px-3 py-1.5 text-xs font-bold bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                >
+                  کۆتایی
+                </button>
+              </div>
             </div>
             <div className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto md:max-h-[30vh] pr-1 pb-1 md:pb-0 items-center md:items-stretch">
-              {[...players].sort((a, b) => b.score - a.score).map((player) => (
-                <div key={player.id} className="flex items-center gap-3 px-3 py-2 md:py-2.5 bg-stone-50 rounded-xl border border-stone-200 shrink-0 min-w-[140px] md:min-w-0">
-                  <div className={`w-3.5 h-3.5 rounded-full ${player.color} shadow-sm border border-stone-200 shrink-0`} />
-                  <span className="font-bold text-stone-700 text-sm truncate max-w-[70px] md:max-w-[120px]">{player.name}</span>
-                  <span className="mr-auto font-black text-stone-900 bg-white px-2 py-1 rounded-md border border-stone-100 shadow-sm text-sm">{player.score}</span>
-                </div>
-              ))}
+              {[...players].sort((a, b) => b.score - a.score).map((player) => {
+                const isCurrentPlayer = players[currentPlayerIndex]?.id === player.id;
+                return (
+                  <div 
+                    key={player.id} 
+                    className={`flex items-center gap-3 px-3 py-2 md:py-2.5 rounded-xl border shrink-0 min-w-[140px] md:min-w-0 transition-all ${
+                      isCurrentPlayer 
+                        ? 'bg-amber-50/90 border-amber-500 shadow-md ring-2 ring-amber-400/50 scale-[1.02]' 
+                        : 'bg-stone-50 border-stone-200'
+                    }`}
+                  >
+                    <div className="relative flex items-center justify-center shrink-0">
+                      <div className={`w-3.5 h-3.5 rounded-full ${player.color} shadow-sm border border-stone-200`} />
+                      {isCurrentPlayer && (
+                        <span className="absolute -inset-1 rounded-full bg-amber-400 opacity-75 animate-ping pointer-events-none" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 truncate max-w-[85px] md:max-w-[130px]">
+                      <span className={`text-sm truncate ${isCurrentPlayer ? 'font-black text-amber-950' : 'font-bold text-stone-700'}`}>
+                        {player.name}
+                      </span>
+                      {isCurrentPlayer && (
+                        <span className="shrink-0 px-1.5 py-0.2 bg-amber-600 text-[10px] text-white font-black rounded-full leading-tight animate-pulse">
+                          نۆرەیە
+                        </span>
+                      )}
+                    </div>
+                    <span className={`mr-auto font-black px-2 py-1 rounded-md border shadow-sm text-sm ${
+                      isCurrentPlayer 
+                        ? 'bg-amber-100/80 border-amber-300 text-amber-950' 
+                        : 'bg-white border-stone-100 text-stone-900'
+                    }`}>
+                      {player.score}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -783,13 +969,22 @@ export default function App() {
                 className="bg-white/95 backdrop-blur-2xl p-4 md:p-6 md:rounded-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:shadow-2xl border-t md:border border-stone-200 text-center relative overflow-y-auto h-[260px] md:h-auto md:max-h-none"
               >
                 <div className={`absolute top-0 left-0 w-full h-1.5 md:h-2 ${players[currentPlayerIndex].color}`} />
-                <span className="text-[10px] md:text-xs font-bold text-stone-500 uppercase tracking-wider mb-1 block mt-1 md:mt-0">نۆرەی یاریزان</span>
+                <div className="flex items-center justify-center gap-2 mb-1 mt-1 md:mt-0">
+                  <span className="text-[10px] md:text-xs font-bold text-stone-500 uppercase tracking-wider">نۆرەی یاریزان</span>
+                  {onlineRoomCode && (
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isMyTurn ? 'bg-emerald-100 text-emerald-700 animate-pulse' : 'bg-stone-200 text-stone-600'}`}>
+                      {isMyTurn ? 'نۆرەی تۆیە!' : 'چاوەڕێ بکە...'}
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-xl md:text-2xl font-black text-stone-900 mb-4 md:mb-6 truncate">{players[currentPlayerIndex].name}</h3>
 
                 {turnPhase === 'choose_card' && (
                   <div className="space-y-2 md:space-y-3">
                     <div className="flex items-center justify-between mb-2 md:mb-3">
-                      <p className="text-xs md:text-sm font-bold text-stone-600">کارتێک ڕابکێشە بۆ وەڵامدانەوە</p>
+                      <p className="text-xs md:text-sm font-bold text-stone-600">
+                        {isMyTurn ? 'کارتێک ڕابکێشە بۆ وەڵامدانەوە' : 'چاوەڕوانی یاریزان بکە کارت ڕابکێشێت'}
+                      </p>
                       {timeLeft !== null && (
                         <div className={`flex items-center gap-1 font-black text-sm px-2 py-1 rounded-full ${timeLeft <= 5 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-stone-200 text-stone-700'}`}>
                           <Clock className="w-4 h-4" />
@@ -800,7 +995,8 @@ export default function App() {
                     {(cardTypesAllowed === 'both' || cardTypesAllowed === 'brainteaser') && (
                       <button 
                         onClick={() => drawCard('brainteaser')}
-                        className="w-full py-3 md:py-4 bg-pink-600 text-white rounded-xl md:rounded-2xl font-bold hover:bg-pink-700 transition-all flex items-center justify-center gap-2 md:gap-3 shadow-md md:shadow-lg active:scale-95 text-sm md:text-base"
+                        disabled={!isMyTurn}
+                        className="w-full py-3 md:py-4 bg-pink-600 text-white rounded-xl md:rounded-2xl font-bold hover:bg-pink-700 transition-all flex items-center justify-center gap-2 md:gap-3 shadow-md md:shadow-lg active:scale-95 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Brain className="w-4 h-4 md:w-5 md:h-5"/> هەڵبژاردن
                       </button>
@@ -808,7 +1004,8 @@ export default function App() {
                     {(cardTypesAllowed === 'both' || cardTypesAllowed === 'guess') && (
                       <button 
                         onClick={() => drawCard('guess')}
-                        className="w-full py-3 md:py-4 bg-sky-500 text-white rounded-xl md:rounded-2xl font-bold hover:bg-sky-600 transition-all flex items-center justify-center gap-2 md:gap-3 shadow-md md:shadow-lg active:scale-95 text-sm md:text-base"
+                        disabled={!isMyTurn}
+                        className="w-full py-3 md:py-4 bg-sky-500 text-white rounded-xl md:rounded-2xl font-bold hover:bg-sky-600 transition-all flex items-center justify-center gap-2 md:gap-3 shadow-md md:shadow-lg active:scale-95 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <HelpCircle className="w-4 h-4 md:w-5 md:h-5"/> زانین
                       </button>
@@ -826,10 +1023,10 @@ export default function App() {
                     {diceValue === null ? (
                       <button 
                         onClick={rollDice}
-                        disabled={isRolling}
-                        className="w-full py-3 md:py-4 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-bold hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 disabled:opacity-75 text-sm md:text-base"
+                        disabled={isRolling || !isMyTurn}
+                        className="w-full py-3 md:py-4 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-bold hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base"
                       >
-                        <span>{isRolling ? '...' : 'بەختی خۆت تاقیبکەوە'}</span>
+                        <span>{isRolling ? '...' : isMyTurn ? 'بەختی خۆت تاقیبکەوە' : 'چاوەڕێی زار بە...'}</span>
                       </button>
                     ) : (
                       <div className="flex flex-col items-center gap-4">
@@ -853,13 +1050,15 @@ export default function App() {
                     <div className="w-16 h-16 md:w-20 md:h-20 mx-auto bg-indigo-50 rounded-2xl border-4 border-indigo-100 flex items-center justify-center mb-4 md:mb-5">
                        <span className="text-4xl md:text-5xl font-black text-indigo-600">{diceValue}</span>
                     </div>
-                    <p className="font-bold text-stone-700 mb-4 md:mb-5 text-sm md:text-lg">مەیدان بڕۆ پێشەوە هەنگاو!</p>
+                    <p className="font-bold text-stone-700 mb-4 md:mb-5 text-sm md:text-lg">
+                      {isMyTurn ? 'مەیدان بڕۆ پێشەوە هەنگاو!' : 'یاریزان دەجوڵێتەوە...'}
+                    </p>
                     <button 
                       onClick={handleMovePlayer}
-                      disabled={isMoving}
-                      className="w-full py-3 md:py-4 bg-stone-900 text-white rounded-xl md:rounded-2xl font-bold hover:bg-stone-800 transition-all flex items-center justify-center gap-2 md:gap-3 active:scale-95 shadow-lg text-sm md:text-base disabled:opacity-50"
+                      disabled={isMoving || !isMyTurn}
+                      className="w-full py-3 md:py-4 bg-stone-900 text-white rounded-xl md:rounded-2xl font-bold hover:bg-stone-800 transition-all flex items-center justify-center gap-2 md:gap-3 active:scale-95 shadow-lg text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isMoving ? 'دەڕوات...' : 'جوڵە بکە'} <FastForward className="w-4 h-4 md:w-5 md:h-5"/>
+                      {isMoving ? 'دەڕوات...' : isMyTurn ? 'جوڵە بکە' : 'چاوەڕوانی جوڵە بە...'} <FastForward className="w-4 h-4 md:w-5 md:h-5"/>
                     </button>
                   </div>
                 )}
@@ -872,10 +1071,10 @@ export default function App() {
                     <p className="font-black text-amber-700 mb-4 md:mb-6 text-base md:text-xl leading-snug md:leading-relaxed">{specialEffectData.message}</p>
                     <button 
                       onClick={handleSpecialEffectDismiss}
-                      disabled={isMoving}
-                      className="w-full py-3 md:py-4 bg-amber-600 text-white rounded-xl md:rounded-2xl font-bold hover:bg-amber-700 transition-all flex items-center justify-center gap-2 md:gap-3 active:scale-95 shadow-md md:shadow-lg text-sm md:text-base disabled:opacity-50"
+                      disabled={isMoving || !isMyTurn}
+                      className="w-full py-3 md:py-4 bg-amber-600 text-white rounded-xl md:rounded-2xl font-bold hover:bg-amber-700 transition-all flex items-center justify-center gap-2 md:gap-3 active:scale-95 shadow-md md:shadow-lg text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      باشە
+                      {isMyTurn ? 'باشە' : 'چاوەڕێی یاریزان بە...'}
                     </button>
                   </div>
                 )}
@@ -934,11 +1133,26 @@ export default function App() {
                 <span className="font-black text-xl text-red-700">پێنج پایەکەی ئیسلام</span>
               </div>
             </div>
-            <div className="hidden md:flex items-center gap-8 font-bold text-stone-600">
-              <button onClick={scrollToRules} className="hover:text-stone-900 transition-colors">چۆنیەتی یاریکردن</button>
+            <div className="flex items-center gap-3 md:gap-6 font-bold text-stone-600">
+              <button 
+                id="header-download-apk-btn"
+                onClick={() => setShowAndroidModal(true)}
+                className="flex items-center gap-1.5 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs md:text-sm font-bold shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
+              >
+                <Smartphone className="w-4 h-4 text-emerald-100" />
+                <span>داگرتنی ئەپی ئەندرۆید (APK)</span>
+              </button>
+              <button 
+                onClick={() => setShowOnlineLobby(true)}
+                className="flex items-center gap-1.5 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-lg text-xs md:text-sm font-bold shadow-md shadow-sky-700/20 transition-all cursor-pointer"
+              >
+                <Globe2 className="w-4 h-4 text-sky-100" />
+                <span>یاری ئۆنلاین</span>
+              </button>
+              <button onClick={scrollToRules} className="hidden md:inline-block hover:text-stone-900 transition-colors">چۆنیەتی یاریکردن</button>
               <button 
                 onClick={() => setGameState('setup')}
-                className="px-6 py-2.5 bg-red-700 text-white rounded-lg hover:bg-red-800 transition-colors shadow-sm"
+                className="px-4 md:px-6 py-2 md:py-2.5 bg-red-700 text-white text-xs md:text-base rounded-lg hover:bg-red-800 transition-colors shadow-sm cursor-pointer"
               >
                 ئێستا یاری بکە
               </button>
@@ -968,17 +1182,24 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row gap-4">
                   <button 
                     onClick={() => setGameState('setup')}
-                    className="px-8 py-4 bg-red-700 text-white text-lg font-bold rounded-xl hover:bg-red-800 transition-all shadow-lg shadow-red-700/20 flex items-center justify-center gap-2"
+                    className="px-8 py-4 bg-red-700 text-white text-lg font-bold rounded-xl hover:bg-red-800 transition-all shadow-lg shadow-red-700/20 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Gamepad2 className="w-5 h-5" />
-                    دەستپێکردنی یاری
+                    یاریکردنی ناوخۆیی
+                  </button>
+                  <button 
+                    onClick={() => setShowOnlineLobby(true)}
+                    className="px-8 py-4 bg-sky-600 text-white text-lg font-bold rounded-xl hover:bg-sky-700 transition-all shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Globe2 className="w-5 h-5" />
+                    یاریکردنی ئۆنلاین
                   </button>
                   <button 
                     onClick={scrollToRules}
-                    className="px-8 py-4 bg-white text-stone-800 border-2 border-stone-200 text-lg font-bold rounded-xl hover:bg-stone-50 hover:border-stone-300 transition-all flex items-center justify-center gap-2"
+                    className="px-8 py-4 bg-white text-stone-800 border-2 border-stone-200 text-lg font-bold rounded-xl hover:bg-stone-50 hover:border-stone-300 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <ScrollText className="w-5 h-5" />
-                    زانیاری زیاتر
+                    یاساکان
                   </button>
                 </div>
               </div>
@@ -1217,14 +1438,23 @@ export default function App() {
                 )}
               </div>
 
-              <button
-                onClick={startGame}
-                disabled={players.length < 2}
-                className="w-full py-4 bg-emerald-700 text-white text-lg font-bold rounded-xl hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95"
-              >
-                <PlayCircle className="w-6 h-6" />
-                <span>دەستپێکردن</span>
-              </button>
+              <div className="space-y-3">
+                <button
+                  onClick={startGame}
+                  disabled={players.length < 2}
+                  className="w-full py-4 bg-emerald-700 text-white text-lg font-bold rounded-xl hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer"
+                >
+                  <PlayCircle className="w-6 h-6" />
+                  <span>دەستپێکردنی یاری ناوخۆیی</span>
+                </button>
+                <button
+                  onClick={() => setShowOnlineLobby(true)}
+                  className="w-full py-3.5 bg-sky-600 text-white text-base font-bold rounded-xl hover:bg-sky-700 flex items-center justify-center gap-2 shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  <Globe2 className="w-5 h-5" />
+                  <span>دەستپێکردنی ژووری ئۆنلاین (فرە-یاریزان)</span>
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
@@ -1270,12 +1500,18 @@ export default function App() {
                       <button
                         key={idx}
                         onClick={() => handleAnswer(idx === activeCardData.correctAnswer)}
-                        className="w-full py-4 px-6 bg-white border-2 border-pink-200 rounded-xl font-bold text-stone-700 hover:bg-pink-100 hover:border-pink-400 transition-all text-right shadow-sm"
+                        disabled={!isMyTurn}
+                        className="w-full py-4 px-6 bg-white border-2 border-pink-200 rounded-xl font-bold text-stone-700 hover:bg-pink-100 hover:border-pink-400 transition-all text-right shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {opt}
                       </button>
                     ))}
                   </div>
+                  {!isMyTurn && (
+                    <p className="text-sm font-bold text-stone-500 text-center animate-pulse">
+                      چاوەڕێی {players[currentPlayerIndex]?.name} بە وەڵام هەڵبژێرێت...
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1297,24 +1533,38 @@ export default function App() {
                   </div>
                   
                   {!showGuessAnswer ? (
-                    <div className="flex gap-3 pt-4">
-                      {clueIndex < activeCardData.clues.length - 1 && (
+                    <div className="space-y-3 pt-4">
+                      <div className="flex gap-3">
+                        {clueIndex < activeCardData.clues.length - 1 && (
+                          <button 
+                            onClick={() => {
+                              const nextIdx = clueIndex + 1;
+                              setClueIndex(nextIdx);
+                              syncOnlineRoom({ clueIndex: nextIdx });
+                            }}
+                            disabled={!isMyTurn}
+                            className="flex-1 py-4 bg-white border-2 border-sky-300 text-sky-700 rounded-xl font-bold hover:bg-sky-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            نیشانەی داهاتوو
+                          </button>
+                        )}
                         <button 
-                          onClick={() => setClueIndex(prev => prev + 1)}
-                          className="flex-1 py-4 bg-white border-2 border-sky-300 text-sky-700 rounded-xl font-bold hover:bg-sky-50 transition-all"
+                          onClick={() => {
+                            setShowGuessAnswer(true);
+                            setTimeLeft(null);
+                            syncOnlineRoom({ showGuessAnswer: true, timeLeft: null });
+                          }}
+                          disabled={!isMyTurn}
+                          className="flex-1 py-4 bg-sky-600 text-white rounded-xl font-bold hover:bg-sky-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          نیشانەی داهاتوو
+                          بینینی وەڵام
                         </button>
+                      </div>
+                      {!isMyTurn && (
+                        <p className="text-sm font-bold text-stone-500 text-center animate-pulse">
+                          چاوەڕێی {players[currentPlayerIndex]?.name} بە بۆ پشکنینی وەڵام...
+                        </p>
                       )}
-                      <button 
-                        onClick={() => {
-                          setShowGuessAnswer(true);
-                          setTimeLeft(null);
-                        }}
-                        className="flex-1 py-4 bg-sky-600 text-white rounded-xl font-bold hover:bg-sky-700 transition-all shadow-md"
-                      >
-                        بینینی وەڵام
-                      </button>
                     </div>
                   ) : (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-sky-200 mt-6 text-center">
@@ -1324,17 +1574,24 @@ export default function App() {
                       <div className="flex gap-3">
                         <button 
                           onClick={() => handleAnswer(true)}
-                          className="flex-1 py-4 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 shadow-md"
+                          disabled={!isMyTurn}
+                          className="flex-1 py-4 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Check className="w-5 h-5"/> بەڵێ
                         </button>
                         <button 
                           onClick={() => handleAnswer(false)}
-                          className="flex-1 py-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all flex items-center justify-center gap-2 shadow-md"
+                          disabled={!isMyTurn}
+                          className="flex-1 py-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <X className="w-5 h-5"/> نەخێر
                         </button>
                       </div>
+                      {!isMyTurn && (
+                        <p className="text-sm font-bold text-stone-500 text-center mt-3 animate-pulse">
+                          تەنها {players[currentPlayerIndex]?.name} دەتوانێت بڕیار لەسەر دروستی وەڵام بدات.
+                        </p>
+                      )}
                     </motion.div>
                   )}
                 </div>
@@ -1343,6 +1600,19 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Android App & APK Download Modal */}
+      <AndroidDownloadModal 
+        isOpen={showAndroidModal} 
+        onClose={() => setShowAndroidModal(false)} 
+      />
+
+      {/* Online Multiplayer Lobby Modal */}
+      <OnlineLobbyModal 
+        isOpen={showOnlineLobby}
+        onClose={() => setShowOnlineLobby(false)}
+        onGameStart={handleOnlineGameStart}
+      />
 
     </div>
   );

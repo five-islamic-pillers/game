@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Playpen Sans Arabic", cursive, sans-serif;
+  --font-playpen: "Playpen Sans Arabic", cursive, sans-serif;
+  --font-gulzar: "Gulzar", serif;
+}
+
+:root {
+  font-family: "Playpen Sans Arabic", cursive, sans-serif;
+  font-optical-sizing: auto;
+}
+
+body {
+  font-family: "Playpen Sans Arabic", cursive, sans-serif;
+  font-optical-sizing: auto;
+}
+
+.gulzar-regular, .font-gulzar {
+  font-family: "Gulzar", serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.playpen-sans-arabic, .font-playpen {
+  font-family: "Playpen Sans Arabic", cursive;
+  font-optical-sizing: auto;
+  font-style: normal;
+}
+
