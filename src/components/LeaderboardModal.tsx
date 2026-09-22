@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Flame, Gamepad2, X, RefreshCw, Crown, User, ShieldCheck } from 'lucide-react';
+import { Trophy, Flame, Gamepad2, X, RefreshCw, Crown, User, ShieldCheck, Award, Percent } from 'lucide-react';
 import { 
   getMostPlayedLeaderboard, 
   getMostWinsLeaderboard, 
+  getUserStats,
   type LeaderboardPlayer 
 } from '../services/leaderboardService';
 import { isProfilePhotoHidden } from '../services/authService';
@@ -21,17 +22,23 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'most_played' | 'most_wins'>('most_wins');
   const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
+  const [myStats, setMyStats] = useState<LeaderboardPlayer | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchLeaderboardData = async (tab: 'most_played' | 'most_wins') => {
     setLoading(true);
     try {
       if (tab === 'most_played') {
-        const data = await getMostPlayedLeaderboard(25);
+        const data = await getMostPlayedLeaderboard(30);
         setPlayers(data);
       } else {
-        const data = await getMostWinsLeaderboard(25);
+        const data = await getMostWinsLeaderboard(30);
         setPlayers(data);
+      }
+
+      if (currentUserGoogleId) {
+        const stats = await getUserStats(currentUserGoogleId);
+        setMyStats(stats);
       }
     } catch (err) {
       console.error('Failed to load leaderboard data:', err);
@@ -44,13 +51,13 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
     if (isOpen) {
       fetchLeaderboardData(activeTab);
     }
-  }, [isOpen, activeTab]);
+  }, [isOpen, activeTab, currentUserGoogleId]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 md:p-6" dir="rtl">
-      {/* Modal Container: Off-white in light mode, Dark in dark mode */}
+      {/* Modal Container */}
       <div className="bg-[#faf8f5] dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-stone-900 dark:text-white animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header */}
@@ -65,7 +72,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 <Flame className="w-4 h-4 text-orange-500" />
               </h2>
               <p className="text-xs text-stone-500 dark:text-stone-400 font-medium">
-                پلەبەندی ڕاستەقینەی یارییە ئۆنلاینەکان
+                پلەبەندی ڕاستەقینەی سەرکەوتنەکان
               </p>
             </div>
           </div>
@@ -76,13 +83,16 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 SoundManager.click();
                 fetchLeaderboardData(activeTab);
               }}
-              title="نوێکردنەوە"
+              title="نوێکردنەوەی ڕیزبەندی"
               className="p-2 text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white hover:bg-stone-200/60 dark:hover:bg-stone-800 rounded-xl transition-colors cursor-pointer"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button
-              onClick={onClose}
+              onClick={() => {
+                SoundManager.click();
+                onClose();
+              }}
               className="p-2 text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white hover:bg-stone-200/60 dark:hover:bg-stone-800 rounded-xl transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -124,10 +134,45 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           </div>
         </div>
 
+        {/* Current User Stats Card (if logged in and played) */}
+        {myStats && (
+          <div className="px-4 py-2.5 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent dark:from-amber-950/50 dark:via-amber-950/20 border-b border-amber-500/30 flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center justify-center font-black text-xs shrink-0">
+                <Award className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-black text-stone-900 dark:text-white truncate">
+                    ئامارەکانی تۆ ({myStats.displayName})
+                  </span>
+                  <span className="text-[9px] font-black bg-amber-500 text-stone-950 px-1.5 py-0.2 rounded-full">
+                    تۆمارکراو
+                  </span>
+                </div>
+                <span className="text-[10px] text-stone-500 dark:text-stone-400">
+                  ڕێژەی سەرکەوتن: {myStats.winRate ?? 0}٪
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="text-center px-2 py-1 bg-amber-500/20 rounded-lg border border-amber-500/30">
+                <div className="text-xs font-black text-amber-800 dark:text-amber-300">{myStats.wins}</div>
+                <div className="text-[8px] text-stone-600 dark:text-stone-400 font-bold">بردنەوە</div>
+              </div>
+              <div className="text-center px-2 py-1 bg-stone-200/70 dark:bg-stone-800 rounded-lg border border-stone-300 dark:border-stone-700">
+                <div className="text-xs font-black text-stone-800 dark:text-stone-200">{myStats.gamesPlayed}</div>
+                <div className="text-[8px] text-stone-500 dark:text-stone-400 font-bold">یاری</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Info Banner */}
-        <div className="px-4 py-2.5 bg-amber-500/10 dark:bg-stone-800/40 border-b border-amber-500/20 dark:border-stone-800/60 flex items-center gap-2 text-[11px] text-amber-900 dark:text-amber-300 font-bold shrink-0">
+        <div className="px-4 py-2 bg-amber-500/10 dark:bg-stone-800/40 border-b border-amber-500/20 dark:border-stone-800/60 flex items-center gap-2 text-[11px] text-amber-900 dark:text-amber-300 font-bold shrink-0">
           <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-          <span>تەنها یارییە ئۆنلاینە ئەنجامدراوەکان تۆمار دەکرێن و لەم ڕیزبەندییەدا هەژمار دەکرێن.</span>
+          <span>خاڵەکان بەشێوەی ڕاستەقینە و ئۆتۆماتیکی دوای کۆتاییهاتنی هەر یارییەک دەژمێردرێن.</span>
         </div>
 
         {/* Leaderboard List */}
@@ -143,10 +188,10 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 <Trophy className="w-7 h-7" />
               </div>
               <h4 className="text-base font-black text-stone-800 dark:text-stone-200">
-                تا ئێستا هیچ یارییەکی ئۆنلاین تەواو نەکراوە
+                تا ئێستا هیچ یارییەکی تەواوکراو تۆمار نەکراوە
               </h4>
               <p className="text-xs text-stone-500 dark:text-stone-400 max-w-sm mx-auto leading-relaxed font-medium">
-                لەگەڵ هاوڕێکانت یاری ئۆنلاین بکە! هەر کاتێک یارییەکی ئۆنلاین کۆتایی هات، ناوی یاریزانەکان و براوەکە بە شێوەیەکی ڕاستەقینە لێرە تۆمار دەکرێت.
+                دەست بە یاری بکە و ببە بە براوە! بە چوونەژوورەوە لە ڕێگەی هەژماری گووگڵ خاڵەکانت لەم خشتەیەدا دادەنرێن.
               </p>
             </div>
           ) : (
@@ -220,11 +265,18 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] text-stone-500 dark:text-stone-400 font-medium">
-                        {activeTab === 'most_wins' 
-                          ? `${player.gamesPlayed} یاری ئۆنلاین` 
-                          : `${player.wins} بردنەوە`}
-                      </span>
+                      <div className="flex items-center gap-2 text-[10px] text-stone-500 dark:text-stone-400 font-medium">
+                        <span>
+                          {activeTab === 'most_wins' 
+                            ? `${player.gamesPlayed} یاری ئەنجامدراو` 
+                            : `${player.wins} سەرکەوتن`}
+                        </span>
+                        {typeof player.winRate === 'number' && (
+                          <span className="text-amber-600 dark:text-amber-400 font-bold">
+                            ({player.winRate}٪ بردنەوە)
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 

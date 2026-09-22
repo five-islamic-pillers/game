@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff, Menu, Sun, Moon, ExternalLink, BookOpen, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff, Menu, Sun, Moon, ExternalLink, BookOpen, Volume2, VolumeX, Flag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { BRAINTEASERS, GUESS_CARDS, type Difficulty, type CardTypes } from './data/cards';
@@ -12,7 +12,7 @@ import { HeaderNavDrawer } from './components/HeaderNavDrawer';
 import { RulesModal } from './components/RulesModal';
 import { GameLog } from './components/GameLog';
 import { ReactionsOverlay } from './components/ReactionsOverlay';
-import { subscribeToRoom, updateOnlineRoomState, sendOnlineReaction, subscribeToReactions } from './services/onlineGameService';
+import { subscribeToRoom, updateOnlineRoomState, sendOnlineReaction, subscribeToReactions, forfeitOnlineMatch } from './services/onlineGameService';
 import { recordPlayerGameResult } from './services/leaderboardService';
 import { auth } from './firebase';
 import { SoundManager, type SoundToast } from './utils/sound';
@@ -138,6 +138,7 @@ export default function App() {
   const [gameState, setGameState] = useState<'intro' | 'landing' | 'setup' | 'playing' | 'finished'>('intro');
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
   const [showEndModal, setShowEndModal] = useState(false);
+  const [showForfeitModal, setShowForfeitModal] = useState(false);
   const [winningPlayers, setWinningPlayers] = useState<Player[]>([]);
   const [landingCardInfoPopup, setLandingCardInfoPopup] = useState<'brainteaser' | 'guess' | null>(null);
   const [showAndroidModal, setShowAndroidModal] = useState(false);
@@ -187,13 +188,13 @@ export default function App() {
 
   // In-Game Emoji Reactions
   const [floatingReactions, setFloatingReactions] = useState<GameReaction[]>([]);
-  const lastSeenReactionIdRef = useRef<string | null>(null);
+  const seenReactionIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (floatingReactions.length === 0) return;
     const timer = setTimeout(() => {
       setFloatingReactions(prev => prev.slice(1));
-    }, 2400);
+    }, 2800);
     return () => clearTimeout(timer);
   }, [floatingReactions]);
 
@@ -203,6 +204,7 @@ export default function App() {
   const [isMoving, setIsMoving] = useState(false);
   const confettiAnimationRef = useRef<number | null>(null);
   const hasTriggeredWinEffectRef = useRef(false);
+  const hasRecordedLeaderboardResultRef = useRef(false);
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(() => SoundManager.isSoundMuted());
   const [activeSoundToast, setActiveSoundToast] = useState<SoundToast | null>(null);
   const soundToastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -349,19 +351,27 @@ export default function App() {
           handleWin(roomData.winningPlayers);
         }
       }
-      if (roomData.latestReaction && roomData.latestReaction.id !== lastSeenReactionIdRef.current) {
-        lastSeenReactionIdRef.current = roomData.latestReaction.id;
-        if (Date.now() - roomData.latestReaction.timestamp < 10000) {
-          SoundManager.reaction();
-          setFloatingReactions(prev => [...prev.slice(-6), roomData.latestReaction!]);
-        }
+
+      // Check recent reactions list from main room document
+      if (Array.isArray(roomData.recentReactions)) {
+        roomData.recentReactions.forEach((rx) => {
+          if (rx && rx.id && !seenReactionIdsRef.current.has(rx.id)) {
+            seenReactionIdsRef.current.add(rx.id);
+            SoundManager.reaction();
+            setFloatingReactions(prev => [...prev.slice(-6), rx]);
+          }
+        });
+      } else if (roomData.latestReaction && !seenReactionIdsRef.current.has(roomData.latestReaction.id)) {
+        seenReactionIdsRef.current.add(roomData.latestReaction.id);
+        SoundManager.reaction();
+        setFloatingReactions(prev => [...prev.slice(-6), roomData.latestReaction!]);
       }
     });
 
-    // Dedicated listener for all players' real-time reactions
+    // Dedicated listener for subcollection reactions across all players
     const unsubscribeReactions = subscribeToReactions(onlineRoomCode, (incomingReaction) => {
-      if (incomingReaction && incomingReaction.id !== lastSeenReactionIdRef.current) {
-        lastSeenReactionIdRef.current = incomingReaction.id;
+      if (incomingReaction && incomingReaction.id && !seenReactionIdsRef.current.has(incomingReaction.id)) {
+        seenReactionIdsRef.current.add(incomingReaction.id);
         SoundManager.reaction();
         setFloatingReactions(prev => [...prev.slice(-6), incomingReaction]);
       }
@@ -387,12 +397,26 @@ export default function App() {
       timestamp: Date.now()
     };
 
-    lastSeenReactionIdRef.current = reaction.id;
+    seenReactionIdsRef.current.add(reaction.id);
     setFloatingReactions(prev => [...prev.slice(-6), reaction]);
 
     if (onlineRoomCode) {
       sendOnlineReaction(onlineRoomCode, reaction);
     }
+  };
+
+  // Handle online match forfeit
+  const handleForfeitMatch = async () => {
+    SoundManager.click();
+    setShowForfeitModal(false);
+    if (onlineRoomCode) {
+      const myPlayer = myOnlinePlayerId 
+        ? players.find(p => p.id === myOnlinePlayerId) 
+        : players[currentPlayerIndex];
+      const myName = myPlayer?.name || 'یاریزان';
+      await forfeitOnlineMatch(onlineRoomCode, myOnlinePlayerId || '', myName);
+    }
+    resetGame();
   };
 
   // Sync state helper to firestore if in online game and user is active player
@@ -437,6 +461,7 @@ export default function App() {
   const handleOnlineGameStart = (roomCode: string, myPlayerId: string, initialRoom: OnlineRoomData) => {
     stopConfetti();
     hasTriggeredWinEffectRef.current = false;
+    hasRecordedLeaderboardResultRef.current = false;
     setOnlineRoomCode(roomCode);
     setMyOnlinePlayerId(myPlayerId);
     setIsOnlineHost(initialRoom.hostId === myPlayerId);
@@ -488,6 +513,7 @@ export default function App() {
     if (players.length >= 2) {
       stopConfetti();
       hasTriggeredWinEffectRef.current = false;
+      hasRecordedLeaderboardResultRef.current = false;
       SoundManager.init();
       setGameState('playing');
       const startIdx = Math.floor(Math.random() * players.length);
@@ -849,28 +875,28 @@ export default function App() {
       timeLeft: null
     });
 
-    // Only record on leaderboard when an ONLINE game is played and finished
-    if (onlineRoomCode) {
+    // Record on leaderboard accurately for authenticated user (Online or Local)
+    if (!hasRecordedLeaderboardResultRef.current) {
+      hasRecordedLeaderboardResultRef.current = true;
       try {
         const currentUser = auth?.currentUser;
-        if (currentUser) {
-          const isWinner = winners.some(w => w.name === currentUser.displayName || (myOnlinePlayerId && winners.some(w => w.id === myOnlinePlayerId)));
+        if (currentUser && currentUser.uid) {
+          const userDisplayName = (currentUser.displayName || currentUser.email?.split('@')[0] || 'یاریزان').trim();
+          const isWinner = winners.some(w => {
+            const wName = (w.name || '').trim().toLowerCase();
+            return (
+              (myOnlinePlayerId && w.id === myOnlinePlayerId) ||
+              (userDisplayName && wName === userDisplayName.toLowerCase()) ||
+              (currentUser.email && wName === currentUser.email.split('@')[0].toLowerCase())
+            );
+          });
+
           recordPlayerGameResult({
             userId: currentUser.uid,
-            displayName: currentUser.displayName || currentUser.email?.split('@')[0] || 'یاریزان',
+            displayName: userDisplayName,
             photoURL: currentUser.photoURL || undefined,
             isWinner
           });
-        } else if (myOnlinePlayerId) {
-          const myPlayer = players.find(p => p.id === myOnlinePlayerId);
-          if (myPlayer && myPlayer.name && myPlayer.name.trim()) {
-            const isWinner = winners.some(w => w.id === myOnlinePlayerId || w.name === myPlayer.name);
-            recordPlayerGameResult({
-              userId: `online_player_${myOnlinePlayerId}`,
-              displayName: myPlayer.name.trim(),
-              isWinner
-            });
-          }
         }
       } catch (e) {
         console.error('Failed to update leaderboard stats', e);
@@ -917,6 +943,7 @@ export default function App() {
   const playAgain = () => {
     stopConfetti();
     hasTriggeredWinEffectRef.current = false;
+    hasRecordedLeaderboardResultRef.current = false;
     const restartedPlayers = players.map(p => ({ ...p, position: 1, score: 0 }));
     setPlayers(restartedPlayers);
     setUsedBrainteasers([]);
@@ -1036,9 +1063,9 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* End Game Modal */}
+      {/* End Game Modal (For Local Matches) */}
       {showEndModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4" dir="rtl">
           <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-8 shadow-2xl max-w-sm w-full text-center text-stone-900 dark:text-stone-100 transition-colors">
             <h3 className="text-2xl font-black text-stone-800 dark:text-stone-100 mb-4">کۆتایی یاری</h3>
             <p className="text-stone-600 dark:text-stone-300 mb-8 font-medium">دڵنیایت دەتەوێت یارییەکە کۆتایی پێ بهێنیت؟ براوە دیاری دەکرێت بەپێی زۆرترین خاڵ.</p>
@@ -1059,6 +1086,38 @@ export default function App() {
                 className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors cursor-pointer"
               >
                 بەڵێ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Online Match Forfeit Modal (Only allows forfeiting/surrendering in Online Matches) */}
+      {showForfeitModal && (
+        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 backdrop-blur-md p-4" dir="rtl">
+          <div className="bg-[#faf8f5] dark:bg-stone-900 border-2 border-rose-500/50 rounded-3xl p-6 md:p-8 shadow-2xl max-w-sm w-full text-center text-stone-900 dark:text-white transition-all animate-in fade-in zoom-in-95">
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-4">
+              <Flag className="w-7 h-7" />
+            </div>
+            <h3 className="text-xl md:text-2xl font-black text-stone-900 dark:text-white mb-2">کشانەوە لە یاری (تەسلیمبوون)</h3>
+            <p className="text-stone-600 dark:text-stone-300 text-xs md:text-sm mb-6 leading-relaxed font-medium">
+              دڵنیایت دەتەوێت لەم یارییە ئۆنلاینە بکشێیتەوە؟ لە کاتی کشانەوەدا یاریزانی بەرامبەر وەک براوە دەستنیشان دەکرێت.
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => {
+                  SoundManager.click();
+                  setShowForfeitModal(false);
+                }} 
+                className="flex-1 py-3 bg-stone-200/80 hover:bg-stone-300 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 font-black rounded-xl transition-all cursor-pointer text-xs md:text-sm"
+              >
+                پەشیمانم (مانەوە)
+              </button>
+              <button 
+                onClick={handleForfeitMatch} 
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl transition-all cursor-pointer text-xs md:text-sm shadow-lg shadow-rose-600/30 active:scale-95"
+              >
+                بەڵێ، کشانەوە
               </button>
             </div>
           </div>
@@ -1093,12 +1152,30 @@ export default function App() {
                   <Smartphone className="w-3 h-3 md:w-3.5 md:h-3.5" />
                   <span>ئەپ</span>
                 </button>
-                <button 
-                  onClick={() => setShowEndModal(true)}
-                  className="px-2.5 py-1 text-[11px] md:text-xs font-bold bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors cursor-pointer"
-                >
-                  کۆتایی
-                </button>
+                {onlineRoomCode ? (
+                  <button 
+                    id="board-forfeit-btn"
+                    onClick={() => {
+                      SoundManager.click();
+                      setShowForfeitModal(true);
+                    }}
+                    className="px-2.5 py-1 text-[11px] md:text-xs font-black bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/80 transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-sm"
+                    title="کشانەوە لەم یارییە (تەسلیمبوون)"
+                  >
+                    <Flag className="w-3 h-3 md:w-3.5 md:h-3.5 text-rose-500" />
+                    <span>کشانەوە</span>
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => {
+                      SoundManager.click();
+                      setShowEndModal(true);
+                    }}
+                    className="px-2.5 py-1 text-[11px] md:text-xs font-bold bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors cursor-pointer"
+                  >
+                    کۆتایی
+                  </button>
+                )}
               </div>
             </div>
 

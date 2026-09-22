@@ -273,6 +273,55 @@ export async function leaveOnlineRoom(roomCode: string, playerId: string) {
   }
 }
 
+export async function forfeitOnlineMatch(
+  roomCode: string, 
+  forfeitingPlayerId: string, 
+  forfeitingPlayerName: string
+) {
+  try {
+    const cleanCode = normalizeRoomCode(roomCode);
+    const roomRef = doc(db, 'rooms', cleanCode);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) return;
+    const data = snap.data() as OnlineRoomData;
+    
+    const remainingPlayers = (data.players || []).filter(p => p.id !== forfeitingPlayerId);
+    const existingLogs = Array.isArray(data.gameLogs) ? data.gameLogs : [];
+    
+    const forfeitLog = {
+      id: `${Date.now()}-forfeit`,
+      type: 'missed_turn' as const,
+      text: `${forfeitingPlayerName} لە یاری کشایەوە (تەسلیم بوو)`,
+      playerName: forfeitingPlayerName,
+      timestamp: Date.now()
+    };
+
+    if (remainingPlayers.length <= 1) {
+      // If only 1 remaining player, they automatically win!
+      const winningPlayers = remainingPlayers.length === 1 ? [remainingPlayers[0]] : [];
+      await updateDoc(roomRef, sanitizeFirestoreData({
+        status: 'finished',
+        winningPlayers,
+        forfeitedPlayerName: forfeitingPlayerName,
+        gameLogs: [...existingLogs.slice(-15), forfeitLog],
+        updatedAt: Date.now()
+      }));
+    } else {
+      // If multiple players still remain, remove the forfeiting player and continue
+      const nextCurrentIndex = (data.currentPlayerIndex || 0) % remainingPlayers.length;
+      await updateDoc(roomRef, sanitizeFirestoreData({
+        players: remainingPlayers,
+        currentPlayerIndex: nextCurrentIndex,
+        forfeitedPlayerName: forfeitingPlayerName,
+        gameLogs: [...existingLogs.slice(-15), forfeitLog],
+        updatedAt: Date.now()
+      }));
+    }
+  } catch (err) {
+    console.warn("Forfeit match error:", err);
+  }
+}
+
 export function subscribeToRoom(
   roomCode: string, 
   onUpdate: (data: OnlineRoomData | null) => void,
@@ -319,16 +368,23 @@ export async function sendOnlineReaction(
       timestamp: reaction.timestamp || Date.now()
     });
 
-    // 1. Write individual reaction to subcollection so host updates cannot overwrite it
+    // 1. Write individual reaction to subcollection
     const reactionDocRef = doc(db, 'rooms', cleanCode, 'reactions', reaction.id);
     await setDoc(reactionDocRef, sanitizedReaction).catch(() => {});
 
-    // 2. Also update room doc for quick sync
+    // 2. Also update room doc with latestReaction and recentReactions list so all devices catch it instantly
     const roomRef = doc(db, 'rooms', cleanCode);
-    await updateDoc(roomRef, {
-      latestReaction: sanitizedReaction,
-      updatedAt: Date.now()
-    }).catch(() => {});
+    const roomSnap = await getDoc(roomRef).catch(() => null);
+    if (roomSnap && roomSnap.exists()) {
+      const roomData = roomSnap.data() as OnlineRoomData;
+      const currentRecent = Array.isArray(roomData.recentReactions) ? roomData.recentReactions : [];
+      const updatedRecent = [...currentRecent.slice(-8), sanitizedReaction];
+      await updateDoc(roomRef, {
+        latestReaction: sanitizedReaction,
+        recentReactions: updatedRecent,
+        updatedAt: Date.now()
+      }).catch(() => {});
+    }
   } catch (err) {
     console.warn("Failed to send online reaction:", err);
   }
@@ -336,7 +392,7 @@ export async function sendOnlineReaction(
 
 /**
  * Dedicated real-time listener for emoji reactions in an online room.
- * Ensures every player (host, 2nd player, 3rd player, etc.) receives all reactions in real-time.
+ * Ensures every player (phone, tablet, PC, host, guest) receives all reactions in real-time.
  */
 export function subscribeToReactions(
   roomCode: string,
@@ -345,7 +401,7 @@ export function subscribeToReactions(
   try {
     const cleanCode = normalizeRoomCode(roomCode);
     const reactionsCol = collection(db, 'rooms', cleanCode, 'reactions');
-    const q = query(reactionsCol, limit(30));
+    const q = query(reactionsCol, limit(20));
 
     const seenReactionIds = new Set<string>();
     let isInitialMount = true;
@@ -362,10 +418,7 @@ export function subscribeToReactions(
           const item = change.doc.data() as GameReaction;
           if (item && item.id && !seenReactionIds.has(item.id)) {
             seenReactionIds.add(item.id);
-            // Display reactions sent in the last 15 seconds
-            if (Date.now() - (item.timestamp || 0) < 15000) {
-              onReaction(item);
-            }
+            onReaction(item);
           }
         }
       });

@@ -57,5 +57,7 @@ export interface OnlineRoomData {
   cardTypesAllowed: CardTypes;
   gameLogs?: GameLogEntry[];
   latestReaction?: GameReaction;
+  recentReactions?: GameReaction[];
+  forfeitedPlayerName?: string;
   updatedAt: number;
 }
