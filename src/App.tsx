@@ -1618,15 +1618,29 @@ export default function App() {
           <footer className="py-8 bg-stone-100 dark:bg-stone-900 text-center text-stone-500 dark:text-stone-400 text-sm font-bold border-t border-stone-200 dark:border-stone-800 transition-colors">
             <div className="container mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
               <p>دروستکراوە لەلایەن میر صڵاح بۆ کەناڵی ئافەرین , Copyright 2026</p>
-              <a 
-                href="https://docs.google.com/forms/d/e/1FAIpQLSf97Y6co7TdU19T5IHrzI4PEeHFozeskRfHImQsahewxVHsag/viewform?usp=publish-editor"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 hover:text-red-600 dark:hover:text-red-400 hover:underline font-bold transition-colors"
-              >
-                <span>ڕاپۆرتکردنی کێشە لە یاری</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+              <div className="flex items-center gap-4">
+                <a 
+                  href="https://www.tiktok.com/@five_islamic_pillers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-stone-800 dark:text-stone-200 hover:text-amber-600 dark:hover:text-amber-400 font-bold transition-colors"
+                >
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.82 4.46v-7.39a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-2.92-1.16 4.78 4.78 0 0 1-1.08-3z"/>
+                  </svg>
+                  <span>پەیجی تیکتۆک</span>
+                </a>
+                <span className="text-stone-300 dark:text-stone-700">|</span>
+                <a 
+                  href="https://docs.google.com/forms/d/e/1FAIpQLSf97Y6co7TdU19T5IHrzI4PEeHFozeskRfHImQsahewxVHsag/viewform?usp=publish-editor"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 hover:text-red-600 dark:hover:text-red-400 hover:underline font-bold transition-colors"
+                >
+                  <span>ڕاپۆرتکردنی کێشە لە یاری</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
             </div>
           </footer>
           
