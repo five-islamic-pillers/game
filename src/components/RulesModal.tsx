@@ -121,10 +121,10 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
                 <div className="p-3.5 rounded-xl bg-white dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700">
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="w-6 h-6 rounded-full bg-red-600 text-white font-black text-xs flex items-center justify-center">٣</span>
-                    <span className="font-black text-xs md:text-sm text-stone-900 dark:text-stone-100">هاویشتنی زار</span>
+                    <span className="font-black text-xs md:text-sm text-stone-900 dark:text-stone-100">بەختی خۆت تاقی بکەرەوە</span>
                   </div>
                   <p className="text-[11px] md:text-xs text-stone-600 dark:text-stone-300">
-                    ئەگەر وەڵامەکەت ڕاست بوو، مافی هاویشتنی زارت هەیە بۆ ئەوەی بەپێی ژمارەی زارەکە بەرەوپێش بچیت.
+                    ئەگەر وەڵامەکەت ڕاست بوو، دەتوانیت بەختی خۆت تاقی بکەیتەوە بۆ ئەوەی بەپێی ژمارەکە بەرەوپێش بچیت.
                   </p>
                 </div>
 
@@ -169,7 +169,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
                   <div>
                     <h4 className="font-black text-rose-700 dark:text-rose-300 text-sm mb-1">کارتی هەڵبژاردن (Brainteaser Card)</h4>
                     <p className="text-xs text-stone-700 dark:text-stone-300 leading-normal">
-                      پرسیاری چوار هەڵبژاردەییە دەربارەی زانیارییە ئیسلامییەکان. وەڵامی دروست ١ خاڵ دەبەخشێت و ڕێگە دەدات زار بهاوێژیت.
+                      پرسیاری چوار هەڵبژاردەییە دەربارەی پێنج پایەکەی ئیسلام. وەڵامی دروست ١ خاڵ دەبەخشێت و ڕێگە دەدات بەختی خۆت تاقی بکەیتەوە.
                     </p>
                   </div>
                 </div>

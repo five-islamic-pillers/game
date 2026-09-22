@@ -1,9 +1,100 @@
-// Robust Web Audio API Sound Manager with anti-glitch ramp envelopes and mobile unlock
+export interface SoundToast {
+  id: string;
+  muted: boolean;
+  message: string;
+  submessage?: string;
+  timestamp: number;
+}
+
+// Robust Web Audio API Sound Manager with anti-glitch ramp envelopes, mobile unlock, global mute support, and visual toasts
 export class SoundManager {
   private static ctx: AudioContext | null = null;
   private static masterGain: GainNode | null = null;
   private static compressor: DynamicsCompressorNode | null = null;
   private static isUnlocked = false;
+  private static muted: boolean = (() => {
+    try {
+      if (typeof window !== 'undefined') {
+        return localStorage.getItem('fourpieces_sound_muted') === 'true';
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  })();
+  private static listeners: Set<(muted: boolean) => void> = new Set();
+  private static toastListeners: Set<(toast: SoundToast) => void> = new Set();
+
+  static isSoundMuted(): boolean {
+    return this.muted;
+  }
+
+  static setMuted(muted: boolean, triggerToast = true) {
+    this.muted = muted;
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('fourpieces_sound_muted', muted ? 'true' : 'false');
+      }
+    } catch {
+      // ignore
+    }
+    this.notifyListeners();
+
+    if (triggerToast) {
+      this.dispatchToast({
+        id: `sound_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        muted,
+        message: muted ? 'دەنگی یاری بێدەنگکرا' : 'دەنگی یاری چالاککرا',
+        submessage: muted ? 'هەموو کاریگەرییە دەنگییەکان بێدەنگ کران' : 'دەنگی جووڵە، زار، کارت و کاردانەوەکان چالاکە',
+        timestamp: Date.now()
+      });
+    }
+  }
+
+  static toggleMute(): boolean {
+    const nextVal = !this.muted;
+    this.setMuted(nextVal, true);
+    if (!nextVal) {
+      // Play a subtle click tone when unmuting so user gets audio feedback
+      this.click();
+    }
+    return nextVal;
+  }
+
+  static subscribeToMute(callback: (muted: boolean) => void): () => void {
+    this.listeners.add(callback);
+    callback(this.muted);
+    return () => {
+      this.listeners.delete(callback);
+    };
+  }
+
+  static subscribeToToast(callback: (toast: SoundToast) => void): () => void {
+    this.toastListeners.add(callback);
+    return () => {
+      this.toastListeners.delete(callback);
+    };
+  }
+
+  private static dispatchToast(toast: SoundToast) {
+    this.toastListeners.forEach((fn) => {
+      try {
+        fn(toast);
+      } catch {
+        // ignore
+      }
+    });
+  }
+
+  private static notifyListeners() {
+    this.listeners.forEach((fn) => {
+      try {
+        fn(this.muted);
+      } catch {
+        // ignore
+      }
+    });
+  }
 
   static init() {
     try {
@@ -54,6 +145,7 @@ export class SoundManager {
   }
 
   static playTone(freq: number, type: OscillatorType, duration: number, vol: number, delay: number = 0) {
+    if (this.muted) return;
     try {
       this.init();
       if (!this.ctx || !this.masterGain) return;

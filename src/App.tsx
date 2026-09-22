@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff, Menu, Sun, Moon, ExternalLink, BookOpen } from 'lucide-react';
+import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff, Menu, Sun, Moon, ExternalLink, BookOpen, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { BRAINTEASERS, GUESS_CARDS, type Difficulty, type CardTypes } from './data/cards';
@@ -12,10 +12,10 @@ import { HeaderNavDrawer } from './components/HeaderNavDrawer';
 import { RulesModal } from './components/RulesModal';
 import { GameLog } from './components/GameLog';
 import { ReactionsOverlay } from './components/ReactionsOverlay';
-import { subscribeToRoom, updateOnlineRoomState, sendOnlineReaction } from './services/onlineGameService';
+import { subscribeToRoom, updateOnlineRoomState, sendOnlineReaction, subscribeToReactions } from './services/onlineGameService';
 import { recordPlayerGameResult } from './services/leaderboardService';
 import { auth } from './firebase';
-import { SoundManager } from './utils/sound';
+import { SoundManager, type SoundToast } from './utils/sound';
 import { useTheme } from './utils/theme';
 import type { OnlineRoomData, GameLogEntry, GameLogActionType, GameReaction } from './types';
 
@@ -202,6 +202,34 @@ export default function App() {
   const [isRolling, setIsRolling] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
   const confettiAnimationRef = useRef<number | null>(null);
+  const hasTriggeredWinEffectRef = useRef(false);
+  const [isSoundMuted, setIsSoundMuted] = useState<boolean>(() => SoundManager.isSoundMuted());
+  const [activeSoundToast, setActiveSoundToast] = useState<SoundToast | null>(null);
+  const soundToastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const unsubMute = SoundManager.subscribeToMute((muted) => {
+      setIsSoundMuted(muted);
+    });
+
+    const unsubToast = SoundManager.subscribeToToast((toast) => {
+      setActiveSoundToast(toast);
+      if (soundToastTimeoutRef.current) {
+        clearTimeout(soundToastTimeoutRef.current);
+      }
+      soundToastTimeoutRef.current = setTimeout(() => {
+        setActiveSoundToast(null);
+      }, 2300);
+    });
+
+    return () => {
+      unsubMute();
+      unsubToast();
+      if (soundToastTimeoutRef.current) {
+        clearTimeout(soundToastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const stopConfetti = () => {
     if (confettiAnimationRef.current) {
@@ -281,7 +309,7 @@ export default function App() {
     }
 
     setOnlineConnected(true);
-    const unsubscribe = subscribeToRoom(onlineRoomCode, (roomData) => {
+    const unsubscribeRoom = subscribeToRoom(onlineRoomCode, (roomData) => {
       if (!roomData) return;
 
       if (roomData.status === 'playing') {
@@ -317,18 +345,32 @@ export default function App() {
       }
       if (roomData.winningPlayers && roomData.winningPlayers.length > 0) {
         setWinningPlayers(roomData.winningPlayers);
-        handleWin(roomData.winningPlayers);
+        if (!hasTriggeredWinEffectRef.current) {
+          handleWin(roomData.winningPlayers);
+        }
       }
       if (roomData.latestReaction && roomData.latestReaction.id !== lastSeenReactionIdRef.current) {
         lastSeenReactionIdRef.current = roomData.latestReaction.id;
-        if (Date.now() - roomData.latestReaction.timestamp < 6000) {
+        if (Date.now() - roomData.latestReaction.timestamp < 10000) {
           SoundManager.reaction();
           setFloatingReactions(prev => [...prev.slice(-6), roomData.latestReaction!]);
         }
       }
     });
 
-    return () => unsubscribe();
+    // Dedicated listener for all players' real-time reactions
+    const unsubscribeReactions = subscribeToReactions(onlineRoomCode, (incomingReaction) => {
+      if (incomingReaction && incomingReaction.id !== lastSeenReactionIdRef.current) {
+        lastSeenReactionIdRef.current = incomingReaction.id;
+        SoundManager.reaction();
+        setFloatingReactions(prev => [...prev.slice(-6), incomingReaction]);
+      }
+    });
+
+    return () => {
+      unsubscribeRoom();
+      unsubscribeReactions();
+    };
   }, [onlineRoomCode]);
 
   // Handle sending emoji reactions
@@ -338,10 +380,10 @@ export default function App() {
       : players[currentPlayerIndex];
 
     const reaction: GameReaction = {
-      id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       emoji,
       senderName: myPlayer?.name || 'یاریزان',
-      senderColor: myPlayer?.color,
+      senderColor: myPlayer?.color || 'bg-amber-500',
       timestamp: Date.now()
     };
 
@@ -393,6 +435,8 @@ export default function App() {
 
   // Online Game start callback from OnlineLobbyModal
   const handleOnlineGameStart = (roomCode: string, myPlayerId: string, initialRoom: OnlineRoomData) => {
+    stopConfetti();
+    hasTriggeredWinEffectRef.current = false;
     setOnlineRoomCode(roomCode);
     setMyOnlinePlayerId(myPlayerId);
     setIsOnlineHost(initialRoom.hostId === myPlayerId);
@@ -442,6 +486,8 @@ export default function App() {
 
   const startGame = () => {
     if (players.length >= 2) {
+      stopConfetti();
+      hasTriggeredWinEffectRef.current = false;
       SoundManager.init();
       setGameState('playing');
       const startIdx = Math.floor(Math.random() * players.length);
@@ -579,7 +625,7 @@ export default function App() {
         if (currentP) {
           addGameLog(
             'roll',
-            `زاری فڕێدا: ${val}`,
+            `بەختی خۆی تاقی کردەوە: ${val}`,
             currentP.name,
             currentP.color,
             val
@@ -774,7 +820,12 @@ export default function App() {
   const handleWin = (winners: Player[]) => {
     setTimeLeft(null);
     setWinningPlayers(winners);
-    SoundManager.win();
+
+    const isFirstTime = !hasTriggeredWinEffectRef.current;
+    if (isFirstTime) {
+      hasTriggeredWinEffectRef.current = true;
+      SoundManager.win();
+    }
     
     if (winners.length === 1) {
       addGameLog(
@@ -826,43 +877,46 @@ export default function App() {
       }
     }
 
-    stopConfetti();
+    if (isFirstTime) {
+      stopConfetti();
 
-    // Only launch confetti if there is a single winner (no tie)
-    if (winners.length === 1) {
-      const duration = 5500;
-      const end = Date.now() + duration;
+      // Only launch confetti if there is a single winner (no tie)
+      if (winners.length === 1) {
+        const duration = 4000;
+        const end = Date.now() + duration;
 
-      const frame = () => {
-        confetti({
-          particleCount: 6,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0 },
-          colors: ['#4f46e5', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'],
-          zIndex: 9999
-        });
-        confetti({
-          particleCount: 6,
-          angle: 120,
-          spread: 55,
-          origin: { x: 1 },
-          colors: ['#4f46e5', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'],
-          zIndex: 9999
-        });
+        const frame = () => {
+          confetti({
+            particleCount: 6,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0 },
+            colors: ['#4f46e5', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'],
+            zIndex: 9999
+          });
+          confetti({
+            particleCount: 6,
+            angle: 120,
+            spread: 55,
+            origin: { x: 1 },
+            colors: ['#4f46e5', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'],
+            zIndex: 9999
+          });
 
-        if (Date.now() < end) {
-          confettiAnimationRef.current = requestAnimationFrame(frame);
-        } else {
-          confettiAnimationRef.current = null;
-        }
-      };
-      confettiAnimationRef.current = requestAnimationFrame(frame);
+          if (Date.now() < end) {
+            confettiAnimationRef.current = requestAnimationFrame(frame);
+          } else {
+            confettiAnimationRef.current = null;
+          }
+        };
+        confettiAnimationRef.current = requestAnimationFrame(frame);
+      }
     }
   };
 
   const playAgain = () => {
     stopConfetti();
+    hasTriggeredWinEffectRef.current = false;
     const restartedPlayers = players.map(p => ({ ...p, position: 1, score: 0 }));
     setPlayers(restartedPlayers);
     setUsedBrainteasers([]);
@@ -905,6 +959,7 @@ export default function App() {
 
   const resetGame = () => {
     stopConfetti();
+    hasTriggeredWinEffectRef.current = false;
     setWinningPlayers([]);
     setGameState('landing');
     setPlayers([]);
@@ -1200,7 +1255,7 @@ export default function App() {
                         className="w-full py-2.5 md:py-3.5 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-black hover:bg-indigo-700 transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 disabled:opacity-50 text-xs md:text-base cursor-pointer"
                       >
                         <Dices className="w-4 h-4 md:w-5 md:h-5" />
-                        <span>{isRolling ? '...' : isMyTurn ? 'وەڵامی ڕاست! زارەکە بهاوێژە 🎲' : 'چاوەڕێی زار بە...'}</span>
+                        <span>{isRolling ? '...' : isMyTurn ? 'وەڵامی ڕاست! بەختی خۆت تاقی بکەرەوە 🎲' : 'چاوەڕێی تاقیکردنەوەی بەخت بە...'}</span>
                       </button>
                     ) : (
                       <div className="flex items-center justify-center gap-3 py-1">
@@ -1214,7 +1269,7 @@ export default function App() {
                             {diceValue}
                           </motion.span>
                         </div>
-                        <span className="text-xs md:text-sm font-bold text-stone-700 dark:text-stone-300">ئەنجامی زار: {diceValue} هەنگاو</span>
+                        <span className="text-xs md:text-sm font-bold text-stone-700 dark:text-stone-300">ئەنجامی بەخت: {diceValue} هەنگاو</span>
                       </div>
                     )}
                   </div>
@@ -1318,8 +1373,29 @@ export default function App() {
               </div>
             </div>
 
-            {/* Header controls: Dark/Light toggle and Three-line Hamburger menu */}
+            {/* Header controls: Sound toggle, Dark/Light toggle and Three-line Hamburger menu */}
             <div className="flex items-center gap-2">
+              <button
+                id="header-sound-toggle-btn"
+                type="button"
+                onClick={() => {
+                  SoundManager.toggleMute();
+                }}
+                className={`p-2.5 rounded-xl border shadow-sm transition-all cursor-pointer active:scale-95 ${
+                  isSoundMuted
+                    ? 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60'
+                    : 'bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 border-stone-200/90 dark:border-stone-700/80'
+                }`}
+                title={isSoundMuted ? 'بێدەنگکراوە - کرتە بکە بۆ چالاککردنی دەنگ' : 'دەنگ چالاکە - کرتە بکە بۆ بێدەنگکردن'}
+                aria-label="Toggle sound"
+              >
+                {isSoundMuted ? (
+                  <VolumeX className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                ) : (
+                  <Volume2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                )}
+              </button>
+
               <button
                 id="header-theme-toggle-btn"
                 type="button"
@@ -1817,6 +1893,61 @@ export default function App() {
         onClose={() => setShowLeaderboardModal(false)}
         currentUserGoogleId={auth?.currentUser?.uid}
       />
+
+      {/* Subtle Visual Toast Notification for Sound Mute/Unmute Confirmation */}
+      <AnimatePresence>
+        {activeSoundToast && (
+          <motion.div
+            key={activeSoundToast.id}
+            initial={{ opacity: 0, y: -30, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.94 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            onClick={() => setActiveSoundToast(null)}
+            className="fixed top-4 md:top-6 left-1/2 -translate-x-1/2 z-[200] max-w-[92vw] sm:max-w-md pointer-events-auto cursor-pointer select-none"
+            role="status"
+            aria-live="polite"
+          >
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.4)] border backdrop-blur-xl transition-all ${
+              activeSoundToast.muted
+                ? 'bg-stone-900/95 text-white border-rose-500/50 ring-1 ring-rose-500/20'
+                : 'bg-stone-900/95 text-white border-emerald-500/50 ring-1 ring-emerald-500/20'
+            }`}>
+              <div className={`w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                activeSoundToast.muted
+                  ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+                  : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+              }`}>
+                {activeSoundToast.muted ? (
+                  <VolumeX className="w-5 h-5 md:w-5.5 md:h-5.5 animate-pulse" />
+                ) : (
+                  <Volume2 className="w-5 h-5 md:w-5.5 md:h-5.5" />
+                )}
+              </div>
+
+              <div className="flex flex-col text-right leading-tight min-w-0 pr-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black text-xs md:text-sm text-stone-100">
+                    {activeSoundToast.message}
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold uppercase ${
+                    activeSoundToast.muted
+                      ? 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
+                      : 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
+                  }`}>
+                    {activeSoundToast.muted ? 'Muted' : 'Sound ON'}
+                  </span>
+                </div>
+                {activeSoundToast.submessage && (
+                  <span className="text-[11px] text-stone-400 font-medium truncate mt-0.5">
+                    {activeSoundToast.submessage}
+                  </span>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

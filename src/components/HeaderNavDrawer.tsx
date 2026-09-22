@@ -17,7 +17,9 @@ import {
   LogOut,
   ExternalLink,
   ShieldCheck,
-  BookOpen
+  BookOpen,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { SoundManager } from '../utils/sound';
 import { 
@@ -56,13 +58,20 @@ export const HeaderNavDrawer: React.FC<HeaderNavDrawerProps> = ({
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [hidePhoto, setHidePhoto] = useState<boolean>(() => isProfilePhotoHidden());
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [isSoundMuted, setIsSoundMuted] = useState<boolean>(() => SoundManager.isSoundMuted());
 
   useEffect(() => {
-    const unsub = subscribeToAuth((user) => {
+    const unsubAuth = subscribeToAuth((user) => {
       setCurrentUser(user);
       setHidePhoto(isProfilePhotoHidden());
     });
-    return () => unsub();
+    const unsubSound = SoundManager.subscribeToMute((muted) => {
+      setIsSoundMuted(muted);
+    });
+    return () => {
+      unsubAuth();
+      unsubSound();
+    };
   }, []);
 
   // Check if current device is Android (only show APK download if Android)
@@ -328,7 +337,41 @@ export const HeaderNavDrawer: React.FC<HeaderNavDrawerProps> = ({
                 </button>
               )}
 
-              {/* 7. Dark / Light Mode Toggle Button */}
+              {/* 7. Sound Effects Mute / Unmute Toggle Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  SoundManager.toggleMute();
+                }}
+                className="w-full p-3.5 rounded-2xl bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800/80 dark:hover:bg-stone-800 border border-stone-200/90 dark:border-stone-700/60 flex items-center justify-between transition-all cursor-pointer group text-right shadow-sm active:scale-98"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-colors ${
+                    isSoundMuted 
+                      ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30' 
+                      : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                  }`}>
+                    {isSoundMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <span className="font-black text-sm text-stone-900 dark:text-stone-200 block">
+                      {isSoundMuted ? 'بێدەنگکردنی دەنگ (Muted)' : 'دەنگی یاری (Sound Effects)'}
+                    </span>
+                    <span className="text-[10px] text-stone-500 dark:text-stone-400 font-medium">
+                      {isSoundMuted ? 'کرتە بکە بۆ چالاککردنی دەنگ' : 'کرتە بکە بۆ بێدەنگکردن'}
+                    </span>
+                  </div>
+                </div>
+                <div className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-colors ${
+                  isSoundMuted 
+                    ? 'bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60' 
+                    : 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60'
+                }`}>
+                  {isSoundMuted ? 'بێدەنگکراوە' : 'چالاکە'}
+                </div>
+              </button>
+
+              {/* 8. Dark / Light Mode Toggle Button */}
               <button
                 onClick={() => {
                   SoundManager.click();

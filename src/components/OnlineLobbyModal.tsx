@@ -197,6 +197,28 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
     prevPlayersCountRef.current = currentCount;
   }, [activeRoom, tab]);
 
+  // 5. Host Manual / Immediate Start
+  const handleHostStartGame = async () => {
+    if (!activeRoom || !myPlayerId) return;
+    if (activeRoom.players.length < 2) {
+      setErrorMsg('بۆ دەستپێکردن پێویستە بەلایەنی کەم ٢ یاریزان لە ژووردا بن.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await updateOnlineRoomState(activeRoom.roomCode, {
+        status: 'playing',
+        currentPlayerIndex: 0,
+        turnPhase: 'choose_card',
+        timeLeft: 30
+      });
+    } catch (err) {
+      setErrorMsg('نەتوانرا یاری دەستپێبکرێت.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Countdown timer effect
   useEffect(() => {
     if (autoStartCountdown === null) {
@@ -217,10 +239,6 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
       setAutoStartCountdown(null);
     }
   }, [autoStartCountdown, activeRoom, myPlayerId]);
-
-  if (!isOpen) return null;
-
-  const isHost = activeRoom?.hostId === myPlayerId;
 
   // Clean room subscription helper
   const setupRoomSubscription = (roomCode: string, playerId: string) => {
@@ -495,28 +513,6 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
     }
   };
 
-  // 5. Host Manual / Immediate Start
-  const handleHostStartGame = async () => {
-    if (!activeRoom || !myPlayerId) return;
-    if (activeRoom.players.length < 2) {
-      setErrorMsg('بۆ دەستپێکردن پێویستە بەلایەنی کەم ٢ یاریزان لە ژووردا بن.');
-      return;
-    }
-    setLoading(true);
-    try {
-      await updateOnlineRoomState(activeRoom.roomCode, {
-        status: 'playing',
-        currentPlayerIndex: 0,
-        turnPhase: 'choose_card',
-        timeLeft: 30
-      });
-    } catch (err) {
-      setErrorMsg('نەتوانرا یاری دەستپێبکرێت.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 6. Share / Copy links
   const copyRoomCode = () => {
     if (activeRoom) {
@@ -559,6 +555,10 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
     setAutoStartCountdown(null);
     setTab('menu');
   };
+
+  if (!isOpen) return null;
+
+  const isHost = activeRoom?.hostId === myPlayerId;
 
   return (
     <div 

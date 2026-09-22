@@ -23,10 +23,33 @@ export const PLAYER_COLORS = [
   'bg-orange-500'
 ];
 
+/**
+ * Deeply sanitizes an object/array so that no `undefined` values exist,
+ * since Firebase Firestore throws errors on `undefined` field values.
+ */
+export function sanitizeFirestoreData<T>(obj: T): T {
+  if (obj === undefined) {
+    return null as any;
+  }
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => (item === undefined ? null : sanitizeFirestoreData(item))) as any;
+  }
+  const cleanObj: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleanObj[key] = sanitizeFirestoreData(value);
+    }
+  }
+  return cleanObj as T;
+}
+
 export function normalizeRoomCode(code: string): string {
   const easternArabic = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
   const persianArabic = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
-  let res = code.trim();
+  let res = (code || '').trim();
   for (let i = 0; i < 10; i++) {
     res = res.replaceAll(easternArabic[i], i.toString()).replaceAll(persianArabic[i], i.toString());
   }
@@ -81,7 +104,7 @@ export async function createOnlineRoom(
   };
 
   const roomRef = doc(db, 'rooms', roomCode);
-  await setDoc(roomRef, initialRoom);
+  await setDoc(roomRef, sanitizeFirestoreData(initialRoom));
 
   return { roomCode, playerId };
 }
@@ -123,18 +146,18 @@ export async function joinOnlineRoom(
   }
 
   const playerId = 'player_' + Math.random().toString(36).substring(2, 9);
-  const colorIndex = data.players.length % PLAYER_COLORS.length;
+  const colorIndex = (data.players || []).length % PLAYER_COLORS.length;
   
   const newPlayer: Player = {
     id: playerId,
-    name: playerName.trim() || `یاریزان ${data.players.length + 1}`,
+    name: playerName.trim() || `یاریزان ${(data.players || []).length + 1}`,
     score: 0,
     color: PLAYER_COLORS[colorIndex],
     position: 1,
     skipTurn: false
   };
 
-  const updatedPlayers = [...data.players, newPlayer];
+  const updatedPlayers = [...(data.players || []), newPlayer];
   const updatedLogs = [
     ...(data.gameLogs || []),
     {
@@ -145,11 +168,11 @@ export async function joinOnlineRoom(
     }
   ];
 
-  await updateDoc(roomRef, {
+  await updateDoc(roomRef, sanitizeFirestoreData({
     players: updatedPlayers,
     gameLogs: updatedLogs,
     updatedAt: Date.now()
-  });
+  }));
 
   return { playerId, roomData: { ...data, players: updatedPlayers, gameLogs: updatedLogs } };
 }
@@ -235,15 +258,15 @@ export async function leaveOnlineRoom(roomCode: string, playerId: string) {
     const data = snap.data() as OnlineRoomData;
     const remainingPlayers = (data.players || []).filter(p => p.id !== playerId);
     if (remainingPlayers.length === 0 || data.hostId === playerId) {
-      await updateDoc(roomRef, {
+      await updateDoc(roomRef, sanitizeFirestoreData({
         status: 'finished',
         updatedAt: Date.now()
-      });
+      }));
     } else {
-      await updateDoc(roomRef, {
+      await updateDoc(roomRef, sanitizeFirestoreData({
         players: remainingPlayers,
         updatedAt: Date.now()
-      });
+      }));
     }
   } catch (err) {
     console.warn("Leave room error:", err);
@@ -255,7 +278,8 @@ export function subscribeToRoom(
   onUpdate: (data: OnlineRoomData | null) => void,
   onError?: (err: Error) => void
 ) {
-  const roomRef = doc(db, 'rooms', roomCode);
+  const cleanCode = normalizeRoomCode(roomCode);
+  const roomRef = doc(db, 'rooms', cleanCode);
   return onSnapshot(roomRef, (docSnap) => {
     if (docSnap.exists()) {
       onUpdate(docSnap.data() as OnlineRoomData);
@@ -272,11 +296,13 @@ export async function updateOnlineRoomState(
   roomCode: string, 
   updates: Partial<OnlineRoomData>
 ) {
-  const roomRef = doc(db, 'rooms', roomCode);
-  await updateDoc(roomRef, {
+  const cleanCode = normalizeRoomCode(roomCode);
+  const roomRef = doc(db, 'rooms', cleanCode);
+  const sanitized = sanitizeFirestoreData({
     ...updates,
     updatedAt: Date.now()
   });
+  await updateDoc(roomRef, sanitized);
 }
 
 export async function sendOnlineReaction(
@@ -285,13 +311,69 @@ export async function sendOnlineReaction(
 ) {
   try {
     const cleanCode = normalizeRoomCode(roomCode);
+    const sanitizedReaction = sanitizeFirestoreData({
+      id: reaction.id,
+      emoji: reaction.emoji,
+      senderName: reaction.senderName || 'یاریزان',
+      senderColor: reaction.senderColor || 'bg-amber-500',
+      timestamp: reaction.timestamp || Date.now()
+    });
+
+    // 1. Write individual reaction to subcollection so host updates cannot overwrite it
+    const reactionDocRef = doc(db, 'rooms', cleanCode, 'reactions', reaction.id);
+    await setDoc(reactionDocRef, sanitizedReaction).catch(() => {});
+
+    // 2. Also update room doc for quick sync
     const roomRef = doc(db, 'rooms', cleanCode);
     await updateDoc(roomRef, {
-      latestReaction: reaction,
+      latestReaction: sanitizedReaction,
       updatedAt: Date.now()
-    });
+    }).catch(() => {});
   } catch (err) {
     console.warn("Failed to send online reaction:", err);
   }
 }
 
+/**
+ * Dedicated real-time listener for emoji reactions in an online room.
+ * Ensures every player (host, 2nd player, 3rd player, etc.) receives all reactions in real-time.
+ */
+export function subscribeToReactions(
+  roomCode: string,
+  onReaction: (reaction: GameReaction) => void
+): () => void {
+  try {
+    const cleanCode = normalizeRoomCode(roomCode);
+    const reactionsCol = collection(db, 'rooms', cleanCode, 'reactions');
+    const q = query(reactionsCol, limit(30));
+
+    const seenReactionIds = new Set<string>();
+    let isInitialMount = true;
+
+    return onSnapshot(q, (snapshot) => {
+      if (isInitialMount) {
+        isInitialMount = false;
+        snapshot.forEach((docSnap) => seenReactionIds.add(docSnap.id));
+        return;
+      }
+
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const item = change.doc.data() as GameReaction;
+          if (item && item.id && !seenReactionIds.has(item.id)) {
+            seenReactionIds.add(item.id);
+            // Display reactions sent in the last 15 seconds
+            if (Date.now() - (item.timestamp || 0) < 15000) {
+              onReaction(item);
+            }
+          }
+        }
+      });
+    }, (err) => {
+      console.warn("Reactions listener notice:", err);
+    });
+  } catch (err) {
+    console.warn("Error subscribing to reactions:", err);
+    return () => {};
+  }
+}
