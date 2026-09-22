@@ -4,5 +4,11 @@ service cloud.firestore {
     match /rooms/{roomId} {
       allow read, write: if true;
     }
+    match /verification_otps/{emailDoc} {
+      allow read, write: if true;
+    }
+    match /leaderboard_users/{userId} {
+      allow read, write: if true;
+    }
   }
 }

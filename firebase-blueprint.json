@@ -18,12 +18,47 @@
         "updatedAt": { "type": "number", "description": "Epoch timestamp of last update" }
       },
       "required": ["roomCode", "hostId", "status", "updatedAt"]
+    },
+    "VerificationOTP": {
+      "title": "Email Verification OTP",
+      "description": "Stores time-limited OTP codes for account verification",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Target email address" },
+        "otp": { "type": "string", "description": "6-digit OTP code" },
+        "expiresAt": { "type": "number", "description": "Expiration epoch timestamp" },
+        "createdAt": { "type": "number", "description": "Creation epoch timestamp" },
+        "attempts": { "type": "number", "description": "Verification attempts count" }
+      },
+      "required": ["email", "otp", "expiresAt"]
+    },
+    "LeaderboardUser": {
+      "title": "Leaderboard User Profile",
+      "description": "Tracks player game stats, total games played, and total wins for the public leaderboards",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Unique Google user ID or player ID" },
+        "displayName": { "type": "string", "description": "Player display name" },
+        "photoURL": { "type": "string", "description": "Avatar photo URL" },
+        "gamesPlayed": { "type": "number", "description": "Total number of games played" },
+        "wins": { "type": "number", "description": "Total games won" },
+        "updatedAt": { "type": "number", "description": "Timestamp of last match completion" }
+      },
+      "required": ["userId", "displayName", "gamesPlayed", "wins"]
     }
   },
   "firestore": {
     "/rooms/{roomId}": {
       "schema": "Room",
       "description": "Public lobby and active game sessions"
+    },
+    "/verification_otps/{emailDoc}": {
+      "schema": "VerificationOTP",
+      "description": "Transient email verification OTP codes"
+    },
+    "/leaderboard_users/{userId}": {
+      "schema": "LeaderboardUser",
+      "description": "Public player ranking statistics for most played games and most wins"
     }
   }
 }

@@ -30,6 +30,14 @@ export interface GameLogEntry {
   timestamp: number;
 }
 
+export interface GameReaction {
+  id: string;
+  emoji: string;
+  senderName: string;
+  senderColor?: string;
+  timestamp: number;
+}
+
 export interface OnlineRoomData {
   roomCode: string;
   hostId: string;
@@ -48,5 +56,6 @@ export interface OnlineRoomData {
   gameDifficulty: GameDifficulty;
   cardTypesAllowed: CardTypes;
   gameLogs?: GameLogEntry[];
+  latestReaction?: GameReaction;
   updatedAt: number;
 }

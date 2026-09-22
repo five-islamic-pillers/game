@@ -8,7 +8,6 @@ import {
   FastForward, 
   Sparkles, 
   Trophy, 
-  Brain, 
   HelpCircle, 
   ChevronDown, 
   ChevronUp,
@@ -24,51 +23,55 @@ interface GameLogProps {
 const getActionIcon = (type: GameLogActionType) => {
   switch (type) {
     case 'roll':
-      return <Dices className="w-3.5 h-3.5 text-indigo-600" />;
+      return <Dices className="w-3.5 h-3.5 text-indigo-500" />;
     case 'answer_correct':
-      return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />;
+      return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />;
     case 'answer_wrong':
-      return <XCircle className="w-3.5 h-3.5 text-rose-600" />;
+      return <XCircle className="w-3.5 h-3.5 text-rose-500" />;
     case 'move':
-      return <FastForward className="w-3.5 h-3.5 text-sky-600" />;
+      return <FastForward className="w-3.5 h-3.5 text-sky-500" />;
     case 'draw_card':
-      return <HelpCircle className="w-3.5 h-3.5 text-amber-600" />;
+      return <HelpCircle className="w-3.5 h-3.5 text-amber-500" />;
     case 'special':
-      return <Sparkles className="w-3.5 h-3.5 text-purple-600" />;
+      return <Sparkles className="w-3.5 h-3.5 text-purple-500" />;
     case 'win':
-      return <Trophy className="w-3.5 h-3.5 text-amber-500" />;
+      return <Trophy className="w-3.5 h-3.5 text-amber-400" />;
     case 'game_start':
     default:
-      return <Activity className="w-3.5 h-3.5 text-stone-500" />;
+      return <Activity className="w-3.5 h-3.5 text-stone-400" />;
   }
 };
 
 const getActionBg = (type: GameLogActionType) => {
   switch (type) {
     case 'roll':
-      return 'bg-indigo-50 border-indigo-100 text-indigo-950';
+      return 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 text-indigo-950 dark:text-indigo-200';
     case 'answer_correct':
-      return 'bg-emerald-50 border-emerald-100 text-emerald-950';
+      return 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200';
     case 'answer_wrong':
-      return 'bg-rose-50 border-rose-100 text-rose-950';
+      return 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-950 dark:text-rose-200';
     case 'move':
-      return 'bg-sky-50 border-sky-100 text-sky-950';
+      return 'bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800 text-sky-950 dark:text-sky-200';
     case 'draw_card':
-      return 'bg-amber-50 border-amber-100 text-amber-950';
+      return 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-950 dark:text-amber-200';
     case 'special':
-      return 'bg-purple-50 border-purple-100 text-purple-950';
+      return 'bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800 text-purple-950 dark:text-purple-200';
     case 'win':
-      return 'bg-amber-50 border-amber-200 text-amber-950';
+      return 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-200';
     case 'game_start':
     default:
-      return 'bg-stone-50 border-stone-100 text-stone-900';
+      return 'bg-stone-50 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-200';
   }
 };
 
 export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768;
+    }
+    return false;
+  });
 
-  // Take the last 5 actions (most recent first)
   const displayLogs = logs.slice(-5).reverse();
   const latestLog = displayLogs[0];
 
@@ -81,19 +84,19 @@ export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
       id="game-log-panel" 
       className={`z-30 pointer-events-auto transition-all duration-200 ${className}`}
     >
-      <div className="bg-white/95 backdrop-blur-2xl border border-stone-200 shadow-xl rounded-2xl overflow-hidden">
+      <div className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-2xl border border-stone-200 dark:border-stone-800 shadow-xl rounded-2xl overflow-hidden transition-colors">
         {/* Header Bar */}
-        <div className="flex items-center justify-between px-3.5 py-2 md:py-2.5 bg-stone-50/80 border-b border-stone-100 select-none">
+        <div className="flex items-center justify-between px-3.5 py-2 md:py-2.5 bg-stone-50/80 dark:bg-stone-950/60 border-b border-stone-200 dark:border-stone-800 select-none">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            <div className="flex items-center gap-1.5 text-xs font-black text-stone-800">
-              <ScrollText className="w-3.5 h-3.5 text-stone-600" />
+            <div className="flex items-center gap-1.5 text-xs font-black text-stone-800 dark:text-stone-200">
+              <ScrollText className="w-3.5 h-3.5 text-stone-600 dark:text-stone-400" />
               <span>تۆماری یاری</span>
             </div>
-            <span className="text-[10px] font-bold text-stone-600 bg-stone-200/80 px-1.5 py-0.2 rounded-full">
+            <span className="text-[10px] font-bold text-stone-600 dark:text-stone-300 bg-stone-200/80 dark:bg-stone-800 px-1.5 py-0.2 rounded-full">
               {logs.length}
             </span>
           </div>
@@ -101,7 +104,7 @@ export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             title={isExpanded ? 'کەمکردنەوە' : 'فراوانکردن'}
-            className="p-1 text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 rounded-lg transition-colors cursor-pointer"
+            className="p-1 text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white hover:bg-stone-200/60 dark:hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
           >
             {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
           </button>
@@ -125,10 +128,10 @@ export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ duration: 0.2, delay: index === 0 ? 0 : 0.03 }}
                   className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-medium ${getActionBg(log.type)} ${
-                    index === 0 ? 'ring-1 ring-stone-300/80 shadow-xs' : 'opacity-90'
+                    index === 0 ? 'ring-1 ring-stone-300/80 dark:ring-stone-600/80 shadow-xs' : 'opacity-90'
                   }`}
                 >
-                  <div className="shrink-0 p-1 bg-white rounded-lg shadow-2xs border border-stone-100 flex items-center justify-center">
+                  <div className="shrink-0 p-1 bg-white dark:bg-stone-800 rounded-lg shadow-2xs border border-stone-200 dark:border-stone-700 flex items-center justify-center">
                     {getActionIcon(log.type)}
                   </div>
 
@@ -141,7 +144,7 @@ export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
 
                   <div className="flex-1 truncate leading-tight">
                     {log.playerName && (
-                      <span className="font-black text-stone-900 ml-1">
+                      <span className="font-black text-stone-900 dark:text-stone-100 ml-1">
                         {log.playerName}:
                       </span>
                     )}
@@ -149,7 +152,7 @@ export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
                   </div>
 
                   {index === 0 && (
-                    <span className="text-[9px] font-black uppercase text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded-full shrink-0">
+                    <span className="text-[9px] font-black uppercase text-emerald-800 dark:text-emerald-300 bg-emerald-100/90 dark:bg-emerald-950/80 px-1.5 py-0.5 rounded-full shrink-0 border border-emerald-300 dark:border-emerald-800">
                       تازە
                     </span>
                   )}
@@ -164,7 +167,7 @@ export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsExpanded(true)}
-              className="px-3 py-1.5 flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-50 transition-colors"
+              className="px-3 py-1.5 flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
             >
               <div className="shrink-0 p-0.5">
                 {getActionIcon(latestLog.type)}
@@ -172,15 +175,15 @@ export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
               {latestLog.playerColor && (
                 <span className={`w-2 h-2 rounded-full shrink-0 ${latestLog.playerColor}`} />
               )}
-              <div className="flex-1 truncate font-medium text-stone-700">
+              <div className="flex-1 truncate font-medium text-stone-700 dark:text-stone-300">
                 {latestLog.playerName && (
-                  <span className="font-black text-stone-900 ml-1">
+                  <span className="font-black text-stone-900 dark:text-stone-100 ml-1">
                     {latestLog.playerName}:
                   </span>
                 )}
                 <span>{latestLog.text}</span>
               </div>
-              <span className="text-[9px] font-bold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded-full">
+              <span className="text-[9px] font-bold text-stone-600 dark:text-stone-300 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded-full border border-stone-200 dark:border-stone-700">
                 دواهەمین
               </span>
             </motion.div>

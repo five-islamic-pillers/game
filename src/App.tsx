@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, ScrollText, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff } from 'lucide-react';
+import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, ScrollText, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff, Menu, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { BRAINTEASERS, GUESS_CARDS, type Difficulty, type CardTypes } from './data/cards';
@@ -7,9 +7,16 @@ import boardImage from './assets/board.jpg';
 import bgImage from './assets/bg.png';
 import { AndroidDownloadModal } from './components/AndroidDownloadModal';
 import { OnlineLobbyModal } from './components/OnlineLobbyModal';
+import { LeaderboardModal } from './components/LeaderboardModal';
+import { HeaderNavDrawer } from './components/HeaderNavDrawer';
 import { GameLog } from './components/GameLog';
-import { subscribeToRoom, updateOnlineRoomState } from './services/onlineGameService';
-import type { OnlineRoomData, GameLogEntry, GameLogActionType } from './types';
+import { ReactionsOverlay } from './components/ReactionsOverlay';
+import { subscribeToRoom, updateOnlineRoomState, sendOnlineReaction } from './services/onlineGameService';
+import { recordPlayerGameResult } from './services/leaderboardService';
+import { auth } from './firebase';
+import { SoundManager } from './utils/sound';
+import { useTheme } from './utils/theme';
+import type { OnlineRoomData, GameLogEntry, GameLogActionType, GameReaction } from './types';
 
 interface Player {
   id: string;
@@ -28,81 +35,6 @@ const PLAYER_COLORS = [
   'bg-purple-500',
   'bg-orange-500'
 ];
-
-// --- Sound Manager ---
-class SoundManager {
-  private static ctx: AudioContext | null = null;
-
-  static init() {
-    try {
-      if (!this.ctx && typeof window !== 'undefined') {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          this.ctx = new AudioCtx();
-        }
-      }
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume().catch(() => {});
-      }
-    } catch {
-      // Audio not supported or blocked
-    }
-  }
-
-  static playTone(freq: number, type: OscillatorType, duration: number, vol: number, delay: number = 0) {
-    try {
-      this.init();
-      if (!this.ctx) return;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, this.ctx.currentTime + delay);
-      gain.gain.setValueAtTime(vol, this.ctx.currentTime + delay);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + delay + duration);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(this.ctx.currentTime + delay);
-      osc.stop(this.ctx.currentTime + delay + duration);
-    } catch {
-      // Ignore audio errors
-    }
-  }
-
-  static correct() {
-    this.playTone(523.25, 'sine', 0.1, 0.1); // C5
-    this.playTone(659.25, 'sine', 0.1, 0.1, 0.1); // E5
-    this.playTone(783.99, 'sine', 0.2, 0.1, 0.2); // G5
-  }
-
-  static wrong() {
-    this.playTone(300, 'sawtooth', 0.2, 0.1);
-    this.playTone(250, 'sawtooth', 0.4, 0.1, 0.2);
-  }
-
-  static roll() {
-    this.playTone(800, 'square', 0.05, 0.02);
-  }
-  
-  static tick() {
-    this.playTone(400, 'sine', 0.05, 0.05);
-  }
-
-  static timerTick() {
-    this.playTone(800, 'square', 0.05, 0.02);
-  }
-
-  static timeout() {
-    this.playTone(200, 'sawtooth', 0.4, 0.2);
-    this.playTone(150, 'sawtooth', 0.6, 0.2, 0.2);
-  }
-
-  static win() {
-    this.playTone(523.25, 'sine', 0.15, 0.1, 0);      // C5
-    this.playTone(659.25, 'sine', 0.15, 0.1, 0.15);   // E5
-    this.playTone(783.99, 'sine', 0.15, 0.1, 0.3);    // G5
-    this.playTone(1046.50, 'sine', 0.4, 0.15, 0.45);  // C6
-  }
-}
 
 const BOARD_SPACES = [
   { id: 1, left: "10.71%", top: "89.63%", color: "transparent", visible: true },
@@ -199,6 +131,7 @@ const BOARD_SPACES = [
     ];
 
 export default function App() {
+  const { theme, toggleTheme } = useTheme();
   const [players, setPlayers] = useState<Player[]>([]);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [gameState, setGameState] = useState<'intro' | 'landing' | 'setup' | 'playing' | 'finished'>('intro');
@@ -210,6 +143,8 @@ export default function App() {
   const [specialEffectData, setSpecialEffectData] = useState<any>(null);
   const [gameDifficulty, setGameDifficulty] = useState<Difficulty>('medium');
   const [cardTypesAllowed, setCardTypesAllowed] = useState<CardTypes>('both');
+  const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
+  const [showNavDrawer, setShowNavDrawer] = useState(false);
 
   // Online Multiplayer States
   const [showOnlineLobby, setShowOnlineLobby] = useState(false);
@@ -217,6 +152,21 @@ export default function App() {
   const [myOnlinePlayerId, setMyOnlinePlayerId] = useState<string | null>(null);
   const [isOnlineHost, setIsOnlineHost] = useState(false);
   const [onlineConnected, setOnlineConnected] = useState(false);
+  const [initialOnlineRoomCode, setInitialOnlineRoomCode] = useState<string | null>(null);
+
+  // Check URL query parameters for direct room joining (e.g. ?room=1234)
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const roomParam = searchParams.get('room') || searchParams.get('join');
+      if (roomParam) {
+        setInitialOnlineRoomCode(roomParam.trim());
+        setShowOnlineLobby(true);
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }, []);
   
   // Game Loop States
   const [turnPhase, setTurnPhase] = useState<'choose_card' | 'reading_card' | 'rolling_dice' | 'moving' | 'special_effect'>('choose_card');
@@ -232,6 +182,18 @@ export default function App() {
   
   // Game Actions Log (for immediate feedback)
   const [gameLogs, setGameLogs] = useState<GameLogEntry[]>([]);
+
+  // In-Game Emoji Reactions
+  const [floatingReactions, setFloatingReactions] = useState<GameReaction[]>([]);
+  const lastSeenReactionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (floatingReactions.length === 0) return;
+    const timer = setTimeout(() => {
+      setFloatingReactions(prev => prev.slice(1));
+    }, 2400);
+    return () => clearTimeout(timer);
+  }, [floatingReactions]);
 
   // Dice and Animation State
   const [diceValue, setDiceValue] = useState<number | null>(null);
@@ -343,10 +305,39 @@ export default function App() {
         setWinningPlayers(roomData.winningPlayers);
         handleWin(roomData.winningPlayers);
       }
+      if (roomData.latestReaction && roomData.latestReaction.id !== lastSeenReactionIdRef.current) {
+        lastSeenReactionIdRef.current = roomData.latestReaction.id;
+        if (Date.now() - roomData.latestReaction.timestamp < 6000) {
+          SoundManager.reaction();
+          setFloatingReactions(prev => [...prev.slice(-6), roomData.latestReaction!]);
+        }
+      }
     });
 
     return () => unsubscribe();
   }, [onlineRoomCode]);
+
+  // Handle sending emoji reactions
+  const handleSendReaction = (emoji: string) => {
+    const myPlayer = myOnlinePlayerId 
+      ? players.find(p => p.id === myOnlinePlayerId)
+      : players[currentPlayerIndex];
+
+    const reaction: GameReaction = {
+      id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      emoji,
+      senderName: myPlayer?.name || 'یاریزان',
+      senderColor: myPlayer?.color,
+      timestamp: Date.now()
+    };
+
+    lastSeenReactionIdRef.current = reaction.id;
+    setFloatingReactions(prev => [...prev.slice(-6), reaction]);
+
+    if (onlineRoomCode) {
+      sendOnlineReaction(onlineRoomCode, reaction);
+    }
+  };
 
   // Sync state helper to firestore if in online game and user is active player
   const syncOnlineRoom = (updates: Partial<OnlineRoomData>) => {
@@ -793,6 +784,34 @@ export default function App() {
       timeLeft: null
     });
 
+    // Only record on leaderboard when an ONLINE game is played and finished
+    if (onlineRoomCode) {
+      try {
+        const currentUser = auth?.currentUser;
+        if (currentUser) {
+          const isWinner = winners.some(w => w.name === currentUser.displayName || (myOnlinePlayerId && winners.some(w => w.id === myOnlinePlayerId)));
+          recordPlayerGameResult({
+            userId: currentUser.uid,
+            displayName: currentUser.displayName || currentUser.email?.split('@')[0] || 'یاریزان',
+            photoURL: currentUser.photoURL || undefined,
+            isWinner
+          });
+        } else if (myOnlinePlayerId) {
+          const myPlayer = players.find(p => p.id === myOnlinePlayerId);
+          if (myPlayer && myPlayer.name && myPlayer.name.trim()) {
+            const isWinner = winners.some(w => w.id === myOnlinePlayerId || w.name === myPlayer.name);
+            recordPlayerGameResult({
+              userId: `online_player_${myOnlinePlayerId}`,
+              displayName: myPlayer.name.trim(),
+              isWinner
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Failed to update leaderboard stats', e);
+      }
+    }
+
     stopConfetti();
 
     // Only launch confetti if there is a single winner (no tie)
@@ -901,7 +920,7 @@ export default function App() {
   };
 
   return (
-    <div dir="rtl" className="w-screen h-[100dvh] overflow-hidden bg-stone-900 text-stone-900 font-sans relative flex items-center justify-center">
+    <div dir="rtl" className="w-screen h-[100dvh] overflow-hidden bg-[#fdfaf6] dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-sans relative flex items-center justify-center transition-colors">
       
       {/* Winning Overlay */}
       <AnimatePresence>
@@ -957,14 +976,14 @@ export default function App() {
 
       {/* End Game Modal */}
       {showEndModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-sm w-full text-center">
-            <h3 className="text-2xl font-black text-stone-800 mb-4">کۆتایی یاری</h3>
-            <p className="text-stone-600 mb-8 font-medium">دڵنیایت دەتەوێت یارییەکە کۆتایی پێ بهێنیت؟ براوە دیاری دەکرێت بەپێی زۆرترین خاڵ.</p>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-8 shadow-2xl max-w-sm w-full text-center text-stone-900 dark:text-stone-100 transition-colors">
+            <h3 className="text-2xl font-black text-stone-800 dark:text-stone-100 mb-4">کۆتایی یاری</h3>
+            <p className="text-stone-600 dark:text-stone-300 mb-8 font-medium">دڵنیایت دەتەوێت یارییەکە کۆتایی پێ بهێنیت؟ براوە دیاری دەکرێت بەپێی زۆرترین خاڵ.</p>
             <div className="flex gap-4">
               <button 
                 onClick={() => setShowEndModal(false)} 
-                className="flex-1 py-3 bg-stone-100 text-stone-700 font-bold rounded-xl hover:bg-stone-200 transition-colors"
+                className="flex-1 py-3 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 font-bold rounded-xl hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors cursor-pointer"
               >
                 نەخێر
               </button>
@@ -975,7 +994,7 @@ export default function App() {
                   const winners = players.filter(p => p.score === highestScore);
                   handleWin(winners);
                 }} 
-                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors"
+                className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors cursor-pointer"
               >
                 بەڵێ
               </button>
@@ -984,15 +1003,92 @@ export default function App() {
         </div>
       )}
 
-      {/* Game Board and Floating HUD Layout (Visible during play) */}
+      {/* Game Board and Responsive HUD Layout (Visible during play) */}
       {gameState === 'playing' && (
-        <div className="w-full h-full relative overflow-hidden bg-stone-100">
+        <div className="w-full h-full relative overflow-hidden bg-stone-100 dark:bg-stone-950 flex flex-col md:block transition-colors">
           
-          {/* 1. Board Container (Full Screen / Max Size) */}
-          <div className="absolute inset-0 flex items-center justify-center pt-[140px] pb-[280px] md:pt-[24px] md:pb-[24px] px-2 md:px-8 pointer-events-none">
+          {/* 1. Top Leaderboard (Score Board) */}
+          {/* Mobile (< md): Ultra-compact top bar (~46px) with room code, player avatars & scores, app & end buttons */}
+          {/* Desktop (md:): Floating card at top-right md:w-[320px] md:top-4 md:right-4 */}
+          <div className="w-full md:w-[320px] md:absolute md:top-4 md:left-auto md:right-4 z-40 bg-white/95 dark:bg-stone-900/95 backdrop-blur-2xl border-b md:border border-stone-200 dark:border-stone-800 md:shadow-2xl md:rounded-2xl p-2 md:p-5 flex flex-col gap-1.5 md:gap-2 shrink-0 transition-colors">
+            <div className="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-1.5 md:pb-3 shrink-0">
+              <div className="flex items-center gap-1.5 md:gap-2">
+                <h2 className="text-sm md:text-lg font-black text-stone-800 dark:text-stone-100">خاڵەکان</h2>
+                {onlineRoomCode && (
+                  <span className="flex items-center gap-1 text-[10px] md:text-[11px] font-black bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 px-2 py-0.5 rounded-full border border-sky-200 dark:border-sky-800" title={`ژووری ئۆنلاین: ${onlineRoomCode}`}>
+                    <Globe2 className="w-3 h-3 text-sky-600 animate-spin" />
+                    <span>#{onlineRoomCode}</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                <button 
+                  id="board-download-android-btn"
+                  onClick={() => setShowAndroidModal(true)}
+                  title="داگرتنی ئەپی ئەندرۆید (APK)"
+                  className="px-2 py-0.5 md:px-2.5 md:py-1 text-[11px] md:text-xs font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <Smartphone className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                  <span>ئەپ</span>
+                </button>
+                <button 
+                  onClick={() => setShowEndModal(true)}
+                  className="px-2.5 py-1 text-[11px] md:text-xs font-bold bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors cursor-pointer"
+                >
+                  کۆتایی
+                </button>
+              </div>
+            </div>
+
+            {/* Players Score Strip (Horizontal scroll on mobile, stacked on desktop) */}
+            <div className="flex flex-row md:flex-col gap-1.5 md:gap-2 overflow-x-auto md:overflow-y-auto md:max-h-[30vh] pr-0.5 pb-0.5 md:pb-0 items-center md:items-stretch scrollbar-none">
+              {[...players].sort((a, b) => b.score - a.score).map((player) => {
+                const isCurrentPlayer = players[currentPlayerIndex]?.id === player.id;
+                return (
+                  <div 
+                    key={player.id} 
+                    className={`flex items-center gap-2 px-2.5 py-1 md:py-2.5 rounded-lg md:rounded-xl border shrink-0 transition-all ${
+                      isCurrentPlayer 
+                        ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-500 shadow-sm ring-1.5 md:ring-2 ring-amber-400/50 scale-[1.02]' 
+                        : 'bg-stone-50 dark:bg-stone-800/80 border-stone-200 dark:border-stone-700/60'
+                    }`}
+                  >
+                    <div className="relative flex items-center justify-center shrink-0">
+                      <div className={`w-3 h-3 md:w-3.5 md:h-3.5 rounded-full ${player.color} shadow-sm border border-stone-200 dark:border-stone-700`} />
+                      {isCurrentPlayer && (
+                        <span className="absolute -inset-1 rounded-full bg-amber-400 opacity-75 animate-ping pointer-events-none" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 truncate max-w-[85px] md:max-w-[130px]">
+                      <span className={`text-xs md:text-sm truncate ${isCurrentPlayer ? 'font-black text-amber-950 dark:text-amber-200' : 'font-bold text-stone-700 dark:text-stone-200'}`}>
+                        {player.name}
+                      </span>
+                      {isCurrentPlayer && (
+                        <span className="shrink-0 px-1 py-0.2 bg-amber-600 text-[9px] md:text-[10px] text-white font-black rounded-full leading-tight animate-pulse">
+                          نۆرەیە
+                        </span>
+                      )}
+                    </div>
+                    <span className={`mr-auto font-black px-1.5 py-0.5 md:px-2 md:py-1 rounded md:rounded-md border shadow-sm text-xs md:text-sm ${
+                      isCurrentPlayer 
+                        ? 'bg-amber-100/80 dark:bg-amber-900/60 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-200' 
+                        : 'bg-white dark:bg-stone-800 border-stone-100 dark:border-stone-700 text-stone-900 dark:text-stone-100'
+                    }`}>
+                      {player.score}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 2. Board Container (Center) */}
+          {/* On Mobile: flex-1 takes ALL remaining vertical space between top and bottom bars! */}
+          {/* On Desktop: absolute inset-0 pt-[24px] pb-[24px] px-8 */}
+          <div className="flex-1 min-h-0 w-full flex items-center justify-center p-1 sm:p-2 relative md:absolute md:inset-0 md:pt-[24px] md:pb-[24px] md:px-8 pointer-events-none">
             <div className="w-full h-full flex items-center justify-center min-w-0 min-h-0 pointer-events-none">
               <div 
-                className="relative shadow-[0_0_50px_rgba(0,0,0,0.15)] rounded-xl md:rounded-2xl overflow-hidden pointer-events-auto" 
+                className="relative shadow-[0_4px_24px_rgba(0,0,0,0.18)] rounded-xl md:rounded-2xl overflow-hidden pointer-events-auto max-w-full max-h-full" 
                 style={{ 
                   ...boardStyle, 
                   height: '100%',
@@ -1018,9 +1114,9 @@ export default function App() {
                       initial={{ left: space.left, top: space.top, x: offsetX, y: offsetY }}
                       animate={{ left: space.left, top: space.top, x: offsetX, y: offsetY }}
                       transition={{ type: 'spring', damping: 25, stiffness: 120 }}
-                      className={`absolute w-7 h-7 md:w-9 md:h-9 -ml-3.5 -mt-3.5 md:-ml-4.5 md:-mt-4.5 rounded-full border-[3px] border-white shadow-[0_4px_12px_rgba(0,0,0,0.5)] z-20 flex items-center justify-center ${player.color}`}
+                      className={`absolute w-6 h-6 sm:w-7 sm:h-7 md:w-9 md:h-9 -ml-3 -mt-3 sm:-ml-3.5 sm:-mt-3.5 md:-ml-4.5 md:-mt-4.5 rounded-full border-2 md:border-[3px] border-white shadow-[0_2px_8px_rgba(0,0,0,0.5)] z-20 flex items-center justify-center ${player.color}`}
                     >
-                      <span className="text-white text-[11px] md:text-sm font-black drop-shadow-md">
+                      <span className="text-white text-[10px] sm:text-[11px] md:text-sm font-black drop-shadow-md">
                         {player.name.substring(0, 1)}
                       </span>
                     </motion.div>
@@ -1030,194 +1126,118 @@ export default function App() {
             </div>
           </div>
 
-          {/* 2. Top Leaderboard (Score Board) */}
-          <div className="absolute top-0 left-0 right-0 md:top-4 md:left-auto md:right-4 md:w-[320px] z-40 bg-white/95 backdrop-blur-2xl border-b md:border border-stone-200 md:shadow-2xl md:rounded-2xl p-3 md:p-5 flex flex-col gap-2 h-[130px] md:h-auto md:max-h-none">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2 md:pb-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base md:text-lg font-black text-stone-800">خاڵەکان</h2>
-                {onlineRoomCode && (
-                  <span className="flex items-center gap-1 text-[11px] font-black bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full border border-sky-200" title={`ژووری ئۆنلاین: ${onlineRoomCode}`}>
-                    <Globe2 className="w-3 h-3 text-sky-600 animate-spin" />
-                    <span>#{onlineRoomCode}</span>
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button 
-                  id="board-download-android-btn"
-                  onClick={() => setShowAndroidModal(true)}
-                  title="داگرتنی ئەپی ئەندرۆید (APK)"
-                  className="px-2.5 py-1 text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors flex items-center gap-1"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>ئەپ</span>
-                </button>
-                <button 
-                  onClick={() => setShowEndModal(true)}
-                  className="px-3 py-1.5 text-xs font-bold bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                >
-                  کۆتایی
-                </button>
-              </div>
-            </div>
-            <div className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto md:max-h-[30vh] pr-1 pb-1 md:pb-0 items-center md:items-stretch">
-              {[...players].sort((a, b) => b.score - a.score).map((player) => {
-                const isCurrentPlayer = players[currentPlayerIndex]?.id === player.id;
-                return (
-                  <div 
-                    key={player.id} 
-                    className={`flex items-center gap-3 px-3 py-2 md:py-2.5 rounded-xl border shrink-0 min-w-[140px] md:min-w-0 transition-all ${
-                      isCurrentPlayer 
-                        ? 'bg-amber-50/90 border-amber-500 shadow-md ring-2 ring-amber-400/50 scale-[1.02]' 
-                        : 'bg-stone-50 border-stone-200'
-                    }`}
-                  >
-                    <div className="relative flex items-center justify-center shrink-0">
-                      <div className={`w-3.5 h-3.5 rounded-full ${player.color} shadow-sm border border-stone-200`} />
-                      {isCurrentPlayer && (
-                        <span className="absolute -inset-1 rounded-full bg-amber-400 opacity-75 animate-ping pointer-events-none" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 truncate max-w-[85px] md:max-w-[130px]">
-                      <span className={`text-sm truncate ${isCurrentPlayer ? 'font-black text-amber-950' : 'font-bold text-stone-700'}`}>
-                        {player.name}
-                      </span>
-                      {isCurrentPlayer && (
-                        <span className="shrink-0 px-1.5 py-0.2 bg-amber-600 text-[10px] text-white font-black rounded-full leading-tight animate-pulse">
-                          نۆرەیە
-                        </span>
-                      )}
-                    </div>
-                    <span className={`mr-auto font-black px-2 py-1 rounded-md border shadow-sm text-sm ${
-                      isCurrentPlayer 
-                        ? 'bg-amber-100/80 border-amber-300 text-amber-950' 
-                        : 'bg-white border-stone-100 text-stone-900'
-                    }`}>
-                      {player.score}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
           {/* 3. Bottom Action Panel */}
-          <div className="absolute bottom-0 left-0 right-0 md:bottom-4 md:left-4 md:right-auto md:w-[360px] z-40">
+          {/* Mobile: compact responsive controller bar (h-auto py-2.5 px-3). Desktop: floating card md:w-[360px] md:absolute md:bottom-4 md:left-4 */}
+          <div className="w-full md:w-[360px] md:absolute md:bottom-4 md:left-4 md:right-auto z-40 shrink-0">
             <AnimatePresence mode="wait">
               <motion.div 
                 key={turnPhase}
-                initial={{ x: -20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: -20, opacity: 0 }}
-                className="bg-white/95 backdrop-blur-2xl p-4 md:p-6 md:rounded-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:shadow-2xl border-t md:border border-stone-200 text-center relative overflow-y-auto h-[260px] md:h-auto md:max-h-none"
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 20, opacity: 0 }}
+                className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-2xl p-2.5 sm:p-3 md:p-6 md:rounded-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.08)] md:shadow-2xl border-t md:border border-stone-200 dark:border-stone-800 text-center relative overflow-hidden h-auto max-h-[150px] md:max-h-none transition-colors"
               >
-                <div className={`absolute top-0 left-0 w-full h-1.5 md:h-2 ${players[currentPlayerIndex].color}`} />
-                <div className="flex items-center justify-center gap-2 mb-1 mt-1 md:mt-0">
-                  <span className="text-[10px] md:text-xs font-bold text-stone-500 uppercase tracking-wider">نۆرەی یاریزان</span>
+                <div className={`absolute top-0 left-0 w-full h-1 md:h-2 ${players[currentPlayerIndex].color}`} />
+                <div className="flex items-center justify-center gap-2 mb-1 mt-0.5">
+                  <span className="text-[10px] md:text-xs font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wider">نۆرەی یاریزان</span>
+                  <span className="text-xs md:text-base font-black text-stone-900 dark:text-stone-100 truncate max-w-[120px] md:max-w-[180px]">{players[currentPlayerIndex].name}</span>
                   {onlineRoomCode && (
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isMyTurn ? 'bg-emerald-100 text-emerald-700 animate-pulse' : 'bg-stone-200 text-stone-600'}`}>
-                      {isMyTurn ? 'نۆرەی تۆیە!' : 'چاوەڕێ بکە...'}
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isMyTurn ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 animate-pulse' : 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400'}`}>
+                      {isMyTurn ? 'نۆرەی تۆیە!' : 'چاوەڕێ بە...'}
                     </span>
                   )}
                 </div>
-                <h3 className="text-xl md:text-2xl font-black text-stone-900 mb-4 md:mb-6 truncate">{players[currentPlayerIndex].name}</h3>
 
                 {turnPhase === 'choose_card' && (
-                  <div className="space-y-2 md:space-y-3">
-                    <div className="flex items-center justify-between mb-2 md:mb-3">
-                      <p className="text-xs md:text-sm font-bold text-stone-600">
-                        {isMyTurn ? 'کارتێک ڕابکێشە بۆ وەڵامدانەوە' : 'چاوەڕوانی یاریزان بکە کارت ڕابکێشێت'}
+                  <div className="space-y-1.5 md:space-y-3">
+                    <div className="flex items-center justify-between mb-1 md:mb-3">
+                      <p className="text-[11px] md:text-sm font-bold text-stone-600 dark:text-stone-300 truncate">
+                        {isMyTurn ? 'کارتێک ڕابکێشە بۆ وەڵامدانەوە' : 'چاوەڕوانی یاریزان بکە...'}
                       </p>
                       {timeLeft !== null && (
-                        <div className={`flex items-center gap-1 font-black text-sm px-2 py-1 rounded-full ${timeLeft <= 5 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-stone-200 text-stone-700'}`}>
-                          <Clock className="w-4 h-4" />
+                        <div className={`flex items-center gap-1 font-black text-xs md:text-sm px-2 py-0.5 rounded-full ${timeLeft <= 5 ? 'bg-red-100 dark:bg-red-950/80 text-red-600 dark:text-red-400 animate-pulse' : 'bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300'}`}>
+                          <Clock className="w-3.5 h-3.5 md:w-4 md:h-4" />
                           <span>{timeLeft}</span>
                         </div>
                       )}
                     </div>
-                    {(cardTypesAllowed === 'both' || cardTypesAllowed === 'brainteaser') && (
-                      <button 
-                        onClick={() => drawCard('brainteaser')}
-                        disabled={!isMyTurn}
-                        className="w-full py-3 md:py-4 bg-pink-600 text-white rounded-xl md:rounded-2xl font-bold hover:bg-pink-700 transition-all flex items-center justify-center gap-2 md:gap-3 shadow-md md:shadow-lg active:scale-95 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Brain className="w-4 h-4 md:w-5 md:h-5"/> هەڵبژاردن
-                      </button>
-                    )}
-                    {(cardTypesAllowed === 'both' || cardTypesAllowed === 'guess') && (
-                      <button 
-                        onClick={() => drawCard('guess')}
-                        disabled={!isMyTurn}
-                        className="w-full py-3 md:py-4 bg-sky-500 text-white rounded-xl md:rounded-2xl font-bold hover:bg-sky-600 transition-all flex items-center justify-center gap-2 md:gap-3 shadow-md md:shadow-lg active:scale-95 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <HelpCircle className="w-4 h-4 md:w-5 md:h-5"/> زانین
-                      </button>
-                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      {(cardTypesAllowed === 'both' || cardTypesAllowed === 'brainteaser') && (
+                        <button 
+                          onClick={() => drawCard('brainteaser')}
+                          disabled={!isMyTurn}
+                          className="w-full py-2 md:py-3.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl md:rounded-2xl font-bold transition-all flex items-center justify-center gap-1.5 md:gap-3 shadow-md active:scale-95 text-xs md:text-base disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <Brain className="w-3.5 h-3.5 md:w-5 md:h-5"/> <span>هەڵبژاردن</span>
+                        </button>
+                      )}
+                      {(cardTypesAllowed === 'both' || cardTypesAllowed === 'guess') && (
+                        <button 
+                          onClick={() => drawCard('guess')}
+                          disabled={!isMyTurn}
+                          className="w-full py-2 md:py-3.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl md:rounded-2xl font-bold transition-all flex items-center justify-center gap-1.5 md:gap-3 shadow-md active:scale-95 text-xs md:text-base disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <HelpCircle className="w-3.5 h-3.5 md:w-5 md:h-5"/> <span>زانین</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
                 {turnPhase === 'rolling_dice' && (
-                  <div>
-                    <div className="w-12 h-12 md:w-16 md:h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2 md:mb-3 shadow-inner">
-                      <Check className="w-6 h-6 md:w-8 md:h-8" />
-                    </div>
-                    <p className="font-bold text-emerald-700 mb-4 md:mb-6 text-sm md:text-lg">وەڵامی ڕاست! (+١ خاڵ)</p>
-                    
+                  <div className="flex items-center justify-center gap-3">
                     {diceValue === null ? (
                       <button 
                         onClick={rollDice}
                         disabled={isRolling || !isMyTurn}
-                        className="w-full py-3 md:py-4 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-bold hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base"
+                        className="w-full py-2.5 md:py-3.5 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-black hover:bg-indigo-700 transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 disabled:opacity-50 text-xs md:text-base cursor-pointer"
                       >
-                        <span>{isRolling ? '...' : isMyTurn ? 'بەختی خۆت تاقیبکەوە' : 'چاوەڕێی زار بە...'}</span>
+                        <Dices className="w-4 h-4 md:w-5 md:h-5" />
+                        <span>{isRolling ? '...' : isMyTurn ? 'وەڵامی ڕاست! زارەکە بهاوێژە 🎲' : 'چاوەڕێی زار بە...'}</span>
                       </button>
                     ) : (
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-50 rounded-2xl border-4 border-stone-200 shadow-inner flex items-center justify-center overflow-hidden">
+                      <div className="flex items-center justify-center gap-3 py-1">
+                        <div className="w-10 h-10 md:w-14 md:h-14 bg-stone-50 dark:bg-stone-800 rounded-xl border-2 border-stone-200 dark:border-stone-700 shadow-inner flex items-center justify-center">
                           <motion.span 
                             key={diceValue}
                             initial={{ scale: 0.5, rotate: -45 }}
                             animate={{ scale: 1, rotate: 0 }}
-                            className="text-4xl md:text-5xl font-black text-stone-800"
+                            className="text-2xl md:text-3xl font-black text-stone-800 dark:text-stone-100"
                           >
                             {diceValue}
                           </motion.span>
                         </div>
+                        <span className="text-xs md:text-sm font-bold text-stone-700 dark:text-stone-300">ئەنجامی زار: {diceValue} هەنگاو</span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {turnPhase === 'moving' && diceValue !== null && (
-                  <div>
-                    <div className="w-16 h-16 md:w-20 md:h-20 mx-auto bg-indigo-50 rounded-2xl border-4 border-indigo-100 flex items-center justify-center mb-4 md:mb-5">
-                       <span className="text-4xl md:text-5xl font-black text-indigo-600">{diceValue}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 md:w-12 md:h-12 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl border border-indigo-100 dark:border-indigo-800 flex items-center justify-center shrink-0">
+                       <span className="text-xl md:text-2xl font-black text-indigo-600 dark:text-indigo-400">{diceValue}</span>
                     </div>
-                    <p className="font-bold text-stone-700 mb-4 md:mb-5 text-sm md:text-lg">
-                      {isMyTurn ? 'مەیدان بڕۆ پێشەوە هەنگاو!' : 'یاریزان دەجوڵێتەوە...'}
-                    </p>
                     <button 
                       onClick={handleMovePlayer}
                       disabled={isMoving || !isMyTurn}
-                      className="w-full py-3 md:py-4 bg-stone-900 text-white rounded-xl md:rounded-2xl font-bold hover:bg-stone-800 transition-all flex items-center justify-center gap-2 md:gap-3 active:scale-95 shadow-lg text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 py-2 md:py-3.5 bg-stone-900 dark:bg-stone-800 text-white rounded-xl md:rounded-2xl font-bold hover:bg-stone-800 dark:hover:bg-stone-700 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-md text-xs md:text-base disabled:opacity-50 cursor-pointer"
                     >
-                      {isMoving ? 'دەڕوات...' : isMyTurn ? 'جوڵە بکە' : 'چاوەڕوانی جوڵە بە...'} <FastForward className="w-4 h-4 md:w-5 md:h-5"/>
+                      <span>{isMoving ? 'دەڕوات...' : isMyTurn ? `جوڵە بکە (${diceValue} هەنگاو)` : 'چاوەڕوانی جوڵە بە...'}</span>
+                      <FastForward className="w-3.5 h-3.5 md:w-5 md:h-5"/>
                     </button>
                   </div>
                 )}
 
                 {turnPhase === 'special_effect' && specialEffectData && (
-                  <div>
-                    <div className="w-12 h-12 md:w-16 md:h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3 md:mb-4 shadow-inner">
-                      <AlertCircle className="w-6 h-6 md:w-8 md:h-8" />
-                    </div>
-                    <p className="font-black text-amber-700 mb-4 md:mb-6 text-base md:text-xl leading-snug md:leading-relaxed">{specialEffectData.message}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="flex-1 text-xs md:text-sm font-bold text-amber-700 dark:text-amber-300 truncate">{specialEffectData.message}</p>
                     <button 
                       onClick={handleSpecialEffectDismiss}
                       disabled={isMoving || !isMyTurn}
-                      className="w-full py-3 md:py-4 bg-amber-600 text-white rounded-xl md:rounded-2xl font-bold hover:bg-amber-700 transition-all flex items-center justify-center gap-2 md:gap-3 active:scale-95 shadow-md md:shadow-lg text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="py-2 px-4 bg-amber-600 text-white rounded-xl font-bold hover:bg-amber-700 transition-all text-xs md:text-sm cursor-pointer"
                     >
-                      {isMyTurn ? 'باشە' : 'چاوەڕێی یاریزان بە...'}
+                      {isMyTurn ? 'باشە' : 'چاوەڕێ بە...'}
                     </button>
                   </div>
                 )}
@@ -1226,10 +1246,19 @@ export default function App() {
             </AnimatePresence>
           </div>
 
-          {/* 4. Small Game Log Component (At the bottom of the board area) */}
-          <div className="absolute bottom-[268px] left-3 right-3 md:bottom-4 md:right-4 md:left-auto md:w-[320px] z-30">
+          {/* 4. Small Game Log Component */}
+          {/* On Mobile: sits right above action panel or compact ticker */}
+          {/* On Desktop: md:absolute md:bottom-4 md:right-4 md:w-[320px] */}
+          <div className="w-full md:w-[320px] md:absolute md:bottom-4 md:right-4 z-30 shrink-0 px-2 pb-1 md:p-0">
             <GameLog logs={gameLogs} />
           </div>
+
+          {/* 5. In-Game Reactions Overlay & Trigger */}
+          <ReactionsOverlay 
+            floatingReactions={floatingReactions}
+            onSendReaction={handleSendReaction}
+            myPlayerName={myOnlinePlayerId ? (players.find(p => p.id === myOnlinePlayerId)?.name || 'من') : (players[currentPlayerIndex]?.name || 'من')}
+          />
         </div>
       )}
 
@@ -1270,46 +1299,57 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="absolute inset-0 z-40 bg-[#fdfaf6] overflow-y-auto"
+            className="absolute inset-0 z-40 bg-[#fdfaf6] dark:bg-[#14111c] text-stone-900 dark:text-stone-100 overflow-y-auto transition-colors"
           >
-            {/* Navbar */}
-          <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b border-stone-200 px-6 py-4 flex items-center justify-between">
+            {/* Navbar with Off-white Theme and Dark/Light Mode toggle */}
+          <nav className="sticky top-0 z-50 bg-[#faf8f5]/90 dark:bg-stone-900/90 backdrop-blur-lg border-b border-stone-200 dark:border-stone-800 px-4 md:px-8 py-3.5 flex items-center justify-between shadow-sm transition-colors">
             <div className="flex items-center gap-3">
-              <span className="text-4xl font-black text-amber-700">٥</span>
+              <span className="text-3xl md:text-4xl font-black text-amber-700 dark:text-amber-500">٥</span>
               <div className="flex flex-col leading-tight">
-                <span className="font-bold text-stone-800">یاری خێزانی</span>
-                <span className="font-black text-xl text-red-700">پێنج پایەکەی ئیسلام</span>
+                <span className="font-bold text-stone-700 dark:text-stone-300 text-xs md:text-sm">یاری خێزانی</span>
+                <span className="font-black text-lg md:text-xl text-red-700 dark:text-red-500">پێنج پایەکەی ئیسلام</span>
               </div>
             </div>
-            <div className="flex items-center gap-3 md:gap-6 font-bold text-stone-600">
-              <button 
-                id="header-download-apk-btn"
-                onClick={() => setShowAndroidModal(true)}
-                className="flex items-center gap-1.5 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs md:text-sm font-bold shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
+
+            {/* Header controls: Dark/Light toggle and Three-line Hamburger menu */}
+            <div className="flex items-center gap-2">
+              <button
+                id="header-theme-toggle-btn"
+                type="button"
+                onClick={() => {
+                  SoundManager.click();
+                  toggleTheme();
+                }}
+                className="p-2.5 bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 active:scale-95 text-stone-700 dark:text-stone-200 rounded-xl border border-stone-200/90 dark:border-stone-700/80 shadow-sm transition-all cursor-pointer"
+                title={theme === 'dark' ? 'گۆڕین بۆ دۆخی ڕووناک' : 'گۆڕین بۆ دۆخی تاریک'}
+                aria-label="Toggle theme"
               >
-                <Smartphone className="w-4 h-4 text-emerald-100" />
-                <span>داگرتنی ئەپی ئەندرۆید (APK)</span>
+                {theme === 'dark' ? (
+                  <Sun className="w-5 h-5 text-amber-400" />
+                ) : (
+                  <Moon className="w-5 h-5 text-stone-700" />
+                )}
               </button>
+
               <button 
-                onClick={() => setShowOnlineLobby(true)}
-                className="flex items-center gap-1.5 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-lg text-xs md:text-sm font-bold shadow-md shadow-sky-700/20 transition-all cursor-pointer"
+                id="header-hamburger-menu-btn"
+                type="button"
+                onClick={() => {
+                  SoundManager.click();
+                  setShowNavDrawer(true);
+                }}
+                className="flex items-center gap-2 px-3.5 md:px-4 py-2.5 bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 active:scale-95 text-stone-800 dark:text-stone-100 rounded-xl text-sm font-black shadow-sm border border-stone-200/90 dark:border-stone-700/80 transition-all cursor-pointer group"
+                title="پێڕستی سەرەکی"
               >
-                <Globe2 className="w-4 h-4 text-sky-100" />
-                <span>یاری ئۆنلاین</span>
-              </button>
-              <button onClick={scrollToRules} className="hidden md:inline-block hover:text-stone-900 transition-colors">چۆنیەتی یاریکردن</button>
-              <button 
-                onClick={() => setGameState('setup')}
-                className="px-4 md:px-6 py-2 md:py-2.5 bg-red-700 text-white text-xs md:text-base rounded-lg hover:bg-red-800 transition-colors shadow-sm cursor-pointer"
-              >
-                ئێستا یاری بکە
+                <Menu className="w-5 h-5 text-amber-600 dark:text-amber-400 group-hover:rotate-180 transition-transform duration-300" />
+                <span>پێڕست</span>
               </button>
             </div>
           </nav>
 
           {/* Hero Section */}
           <header 
-            className="relative w-full overflow-hidden min-h-[500px] flex items-center bg-stone-100"
+            className="relative w-full overflow-hidden min-h-[500px] flex items-center bg-stone-100 dark:bg-stone-900 transition-colors"
             style={{ 
               backgroundImage: `url(${bgImage})`, 
               backgroundSize: 'cover', 
@@ -1317,34 +1357,34 @@ export default function App() {
               backgroundRepeat: 'no-repeat'
             }}
           >
-            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px]"></div>
+            <div className="absolute inset-0 bg-white/40 dark:bg-black/65 backdrop-blur-[2px] transition-colors"></div>
             <div className="container mx-auto px-6 relative z-10 flex flex-col md:flex-row items-center justify-between">
               <div className="md:w-1/2 max-w-xl py-16">
-                <h1 className="text-5xl md:text-6xl font-black text-stone-900 mb-6 leading-tight flex flex-col gap-2">
+                <h1 className="text-5xl md:text-6xl font-black text-stone-900 dark:text-stone-100 mb-6 leading-tight flex flex-col gap-2">
                   <span>یاری خێزانی</span>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-700 to-amber-600">پێنج پایەکەی ئیسلام</span>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-700 via-amber-600 to-amber-500">پێنج پایەکەی ئیسلام</span>
                 </h1>
-                <p className="text-xl md:text-2xl font-medium text-stone-700 mb-10 leading-relaxed">
+                <p className="text-xl md:text-2xl font-medium text-stone-700 dark:text-stone-300 mb-10 leading-relaxed">
                   ئامانجی یارییەکە ئەوەیە وەڵامی ڕاستی پرسیارەکان بدەیتەوە، فێرببیت دەربارەی پێنج پایەکەی ئیسلام، و یەکەم کەس بیت بگەیتە خاڵی کۆتایی بە زۆرترین خاڵەوە.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <button 
                     onClick={() => setGameState('setup')}
-                    className="px-8 py-4 bg-red-700 text-white text-lg font-bold rounded-xl hover:bg-red-800 transition-all shadow-lg shadow-red-700/20 flex items-center justify-center gap-2 cursor-pointer"
+                    className="px-8 py-4 bg-red-700 hover:bg-red-800 text-white text-lg font-bold rounded-xl transition-all shadow-lg shadow-red-700/20 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Gamepad2 className="w-5 h-5" />
                     یاریکردنی ناوخۆیی
                   </button>
                   <button 
                     onClick={() => setShowOnlineLobby(true)}
-                    className="px-8 py-4 bg-sky-600 text-white text-lg font-bold rounded-xl hover:bg-sky-700 transition-all shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                    className="px-8 py-4 bg-sky-600 hover:bg-sky-700 text-white text-lg font-bold rounded-xl transition-all shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Globe2 className="w-5 h-5" />
                     یاریکردنی ئۆنلاین
                   </button>
                   <button 
                     onClick={scrollToRules}
-                    className="px-8 py-4 bg-white text-stone-800 border-2 border-stone-200 text-lg font-bold rounded-xl hover:bg-stone-50 hover:border-stone-300 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="px-8 py-4 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 border-2 border-stone-200 dark:border-stone-700 text-lg font-bold rounded-xl hover:bg-stone-50 dark:hover:bg-stone-750 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <ScrollText className="w-5 h-5" />
                     یاساکان
@@ -1355,7 +1395,7 @@ export default function App() {
           </header>
 
           {/* Cards Image Section */}
-          <section className="py-16 bg-[#fdfaf6] border-y border-stone-200">
+          <section className="py-16 bg-[#fdfaf6] dark:bg-stone-950 border-y border-stone-200 dark:border-stone-850 transition-colors">
             <div className="container mx-auto px-6 text-center flex flex-col items-center">
               <div className="flex gap-8 md:gap-16 justify-center items-center mb-10">
                 
@@ -1371,7 +1411,7 @@ export default function App() {
                        <HelpCircle className="w-8 h-8 text-white/80" />
                      </div>
                   </motion.div>
-                  <span className="text-2xl font-black text-stone-800">کارتی زانین</span>
+                  <span className="text-2xl font-black text-stone-800 dark:text-stone-100">کارتی زانین</span>
                 </div>
 
                 {/* Brainteaser Card */}
@@ -1386,49 +1426,49 @@ export default function App() {
                        <Brain className="w-8 h-8 text-white/80" />
                      </div>
                   </motion.div>
-                  <span className="text-2xl font-black text-stone-800">کارتی هەڵبژاردن</span>
+                  <span className="text-2xl font-black text-stone-800 dark:text-stone-100">کارتی هەڵبژاردن</span>
                 </div>
 
               </div>
 
               {/* Info Row */}
-              <div className="flex flex-wrap justify-center items-center gap-4 md:gap-8 text-stone-700 font-bold text-lg md:text-xl">
+              <div className="flex flex-wrap justify-center items-center gap-4 md:gap-8 text-stone-700 dark:text-stone-300 font-bold text-lg md:text-xl">
                 <span>٦٠٠ کارتی چالەنج بۆ زیادکردنی زانیاری</span>
-                <span className="hidden md:block w-px h-6 bg-stone-300"></span>
+                <span className="hidden md:block w-px h-6 bg-stone-300 dark:bg-stone-700"></span>
                 <span>کایەیەکی گونجاو بۆ تەمەنی ٨+</span>
-                <span className="hidden md:block w-px h-6 bg-stone-300"></span>
+                <span className="hidden md:block w-px h-6 bg-stone-300 dark:bg-stone-700"></span>
                 <span>بۆ ٢-٦ یاریزان</span>
               </div>
             </div>
           </section>
 
           {/* Rules Section */}
-          <section id="rules-section" className="py-24 bg-[#fdfaf6]">
+          <section id="rules-section" className="py-24 bg-[#fdfaf6] dark:bg-[#121019] transition-colors">
             <div className="container mx-auto px-6 max-w-4xl">
               <div className="text-center mb-16">
-                <h2 className="text-4xl font-black text-stone-900 mb-4">چۆنیەتی یاریکردن</h2>
-                <p className="text-xl text-stone-600 font-medium">یاساکان زۆر ئاسانن، با دەست پێبکەین!</p>
+                <h2 className="text-4xl font-black text-stone-900 dark:text-stone-100 mb-4">چۆنیەتی یاریکردن</h2>
+                <p className="text-xl text-stone-600 dark:text-stone-400 font-medium">یاساکان زۆر ئاسانن، با دەست پێبکەین!</p>
               </div>
 
               <div className="space-y-8">
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-200 flex flex-col sm:flex-row gap-6 items-start">
-                  <div className="w-16 h-16 bg-red-100 text-red-700 rounded-2xl flex items-center justify-center shrink-0">
+                <div className="bg-white dark:bg-stone-900/90 p-8 rounded-2xl shadow-sm border border-stone-200 dark:border-stone-800 flex flex-col sm:flex-row gap-6 items-start transition-colors">
+                  <div className="w-16 h-16 bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 rounded-2xl flex items-center justify-center shrink-0">
                     <Trophy className="w-8 h-8" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-stone-800 mb-3">ئامانجی یاری</h3>
-                    <p className="text-stone-600 leading-relaxed text-lg font-medium">ئامانجی یارییەکە ئەوەیە وەڵامی ڕاستی پرسیارەکان بدەیتەوە، فێرببیت دەربارەی پێنج پایەکەی ئیسلام، و یەکەم کەس بیت بگەیتە خاڵی کۆتایی بە زۆرترین خاڵەوە.</p>
+                    <h3 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-3">ئامانجی یاری</h3>
+                    <p className="text-stone-600 dark:text-stone-300 leading-relaxed text-lg font-medium">ئامانجی یارییەکە ئەوەیە وەڵامی ڕاستی پرسیارەکان بدەیتەوە، فێرببیت دەربارەی پێنج پایەکەی ئیسلام، و یەکەم کەس بیت بگەیتە خاڵی کۆتایی بە زۆرترین خاڵەوە.</p>
                   </div>
                 </div>
 
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-stone-200 flex flex-col sm:flex-row gap-6 items-start">
-                  <div className="w-16 h-16 bg-sky-100 text-sky-700 rounded-2xl flex items-center justify-center shrink-0">
+                <div className="bg-white dark:bg-stone-900/90 p-8 rounded-2xl shadow-sm border border-stone-200 dark:border-stone-800 flex flex-col sm:flex-row gap-6 items-start transition-colors">
+                  <div className="w-16 h-16 bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-400 rounded-2xl flex items-center justify-center shrink-0">
                     <Brain className="w-8 h-8" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-stone-800 mb-3">کارتە دیجیتاڵییەکان</h3>
-                    <p className="text-stone-600 leading-relaxed text-lg mb-3 font-medium">لە نۆرەی خۆتدا، دەتوانیت کارتێک هەڵبژێریت ڕاستەوخۆ لەناو شاشەکەدا و وەڵامی بدەیتەوە!</p>
-                    <ul className="list-disc list-inside text-stone-600 space-y-2 text-lg font-medium">
+                    <h3 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-3">کارتە دیجیتاڵییەکان</h3>
+                    <p className="text-stone-600 dark:text-stone-300 leading-relaxed text-lg mb-3 font-medium">لە نۆرەی خۆتدا، دەتوانیت کارتێک هەڵبژێریت ڕاستەوخۆ لەناو شاشەکەدا و وەڵامی بدەیتەوە!</p>
+                    <ul className="list-disc list-inside text-stone-600 dark:text-stone-300 space-y-2 text-lg font-medium">
                       <li><strong>وەڵامی ڕاست:</strong> بەختی خۆت تاقیدەکەیتەوە و پارچەکەت دەبەیتە پێشەوە.</li>
                       <li><strong>وەڵامی هەڵە:</strong> ڕاستەوخۆ نۆرەکەت کۆتایی دێت و لە جێگای خۆت دەمێنیتەوە.</li>
                     </ul>
@@ -1439,7 +1479,7 @@ export default function App() {
               <div className="mt-16 text-center">
                 <button 
                   onClick={() => setGameState('setup')}
-                  className="px-10 py-5 bg-stone-900 text-white text-xl font-bold rounded-2xl hover:bg-stone-800 transition-all shadow-xl shadow-stone-900/20 active:scale-95"
+                  className="px-10 py-5 bg-stone-900 dark:bg-amber-600 hover:bg-stone-800 dark:hover:bg-amber-500 text-white text-xl font-bold rounded-2xl transition-all shadow-xl shadow-stone-900/20 active:scale-95 cursor-pointer"
                 >
                   ئامادەیت؟ دەستپێبکە!
                 </button>
@@ -1448,46 +1488,46 @@ export default function App() {
           </section>
 
           {/* Footer */}
-          <footer className="py-8 bg-stone-100 text-center text-stone-500 text-sm font-bold border-t border-stone-200">
+          <footer className="py-8 bg-stone-100 dark:bg-stone-900 text-center text-stone-500 dark:text-stone-400 text-sm font-bold border-t border-stone-200 dark:border-stone-800 transition-colors">
             <div className="container mx-auto px-6">
-              <p>درئستکراوە لەلایەن میر صڵاح بۆ کەناڵی ئافەرین , Copyright 2026</p>
+              <p>دروسکراوە لەلایەن میر صڵاح بۆ کەناڵی ئافەرین , Copyright 2026</p>
             </div>
           </footer>
           
           {/* Card Info Popup */}
           <AnimatePresence>
             {landingCardInfoPopup && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                  className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl relative border-4 border-stone-800"
+                  className="bg-white dark:bg-stone-900 rounded-3xl p-8 max-w-md w-full shadow-2xl relative border-4 border-stone-800 dark:border-stone-700 text-stone-900 dark:text-stone-100 transition-colors"
                 >
                   <button 
                     onClick={() => setLandingCardInfoPopup(null)}
-                    className="absolute top-4 right-4 text-stone-400 hover:text-stone-700 transition-colors"
+                    className="absolute top-4 right-4 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 transition-colors p-1"
                   >
                     <X className="w-6 h-6" />
                   </button>
                   <div className="text-center">
                     {landingCardInfoPopup === 'guess' ? (
                       <>
-                        <div className="w-20 h-20 bg-sky-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg border-4 border-stone-800">
+                        <div className="w-20 h-20 bg-sky-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg border-4 border-stone-800 dark:border-stone-700">
                           <HelpCircle className="w-10 h-10 text-white" />
                         </div>
-                        <h3 className="text-3xl font-black text-stone-800 mb-4">کارتی زانین</h3>
-                        <p className="text-stone-600 font-medium text-lg leading-relaxed">
+                        <h3 className="text-3xl font-black text-stone-800 dark:text-stone-100 mb-4">کارتی زانین</h3>
+                        <p className="text-stone-600 dark:text-stone-300 font-medium text-lg leading-relaxed">
                           لە کارتی زانیندا، وەسفێکی وشەیەک دەکرێت و یاریزان دەبێت بزانێت ئەو وشەیە چییە، ئەگەر یاریزانەکە وەڵامەکەی ڕاست بوو دەتوانێت بەختی خۆی تاقیبکاتەوە!
                         </p>
                       </>
                     ) : (
                       <>
-                        <div className="w-20 h-20 bg-pink-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg border-4 border-stone-800">
+                        <div className="w-20 h-20 bg-pink-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg border-4 border-stone-800 dark:border-stone-700">
                           <Brain className="w-10 h-10 text-white" />
                         </div>
-                        <h3 className="text-3xl font-black text-stone-800 mb-4">کارتی هەڵبژاردن</h3>
-                        <p className="text-stone-600 font-medium text-lg leading-relaxed">
+                        <h3 className="text-3xl font-black text-stone-800 dark:text-stone-100 mb-4">کارتی هەڵبژاردن</h3>
+                        <p className="text-stone-600 dark:text-stone-300 font-medium text-lg leading-relaxed">
                           لە کارتی هەڵبژاردندا، پرسیارێکت ئاراستە دەکرێت لەگەڵ چەند هەڵبژاردنێک. ئەگەر وەڵامی ڕاست هەڵبژێریت، خاڵێک بەدەست دەهێنیت و بەختی خۆت تاقیدەکەیتەوە!
                         </p>
                       </>
@@ -1511,33 +1551,33 @@ export default function App() {
             transition={{ duration: 0.5 }}
             className="absolute inset-0 z-40 flex items-center justify-center p-6 bg-stone-900/80 backdrop-blur-md"
           >
-            <div className="w-full max-w-md max-h-[95dvh] overflow-y-auto bg-white p-8 rounded-3xl shadow-2xl">
+            <div className="w-full max-w-md max-h-[95dvh] overflow-y-auto bg-white dark:bg-stone-900 p-8 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 text-stone-900 dark:text-stone-100 transition-colors">
               <button 
                 onClick={() => setGameState('landing')}
-                className="mb-6 text-stone-500 hover:text-stone-800 flex items-center gap-1 transition-colors text-sm font-bold"
+                className="mb-6 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-100 flex items-center gap-1 transition-colors text-sm font-bold cursor-pointer"
               >
                 <ChevronRight className="w-4 h-4" />
                 گەڕانەوە
               </button>
-              <h1 className="text-3xl font-black mb-2 text-center text-emerald-800">ڕێکخستنی یاری</h1>
-              <p className="text-stone-500 mb-6 text-center text-sm font-bold">٢ بۆ ٦ یاریزان زیاد بکە بۆ دەستپێکردن</p>
+              <h1 className="text-3xl font-black mb-2 text-center text-emerald-800 dark:text-emerald-400">ڕێکخستنی یاری</h1>
+              <p className="text-stone-500 dark:text-stone-400 mb-6 text-center text-sm font-bold">٢ بۆ ٦ یاریزان زیاد بکە بۆ دەستپێکردن</p>
               
-              <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 mb-6 space-y-4">
+              <div className="bg-stone-50 dark:bg-stone-800/80 p-4 rounded-xl border border-stone-200 dark:border-stone-700 mb-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-bold text-stone-700 mb-2">ئاستی سەختی پرسیارەکان:</label>
+                  <label className="block text-sm font-bold text-stone-700 dark:text-stone-200 mb-2">ئاستی سەختی پرسیارەکان:</label>
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => setGameDifficulty('easy')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors ${gameDifficulty === 'easy' ? 'bg-emerald-600 text-white' : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'}`}>ئاسان</button>
-                    <button type="button" onClick={() => setGameDifficulty('medium')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors ${gameDifficulty === 'medium' ? 'bg-amber-500 text-white' : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'}`}>مامناوەند</button>
-                    <button type="button" onClick={() => setGameDifficulty('hard')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors ${gameDifficulty === 'hard' ? 'bg-red-600 text-white' : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'}`}>قورس</button>
+                    <button type="button" onClick={() => setGameDifficulty('easy')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${gameDifficulty === 'easy' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>ئاسان</button>
+                    <button type="button" onClick={() => setGameDifficulty('medium')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${gameDifficulty === 'medium' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>مامناوەند</button>
+                    <button type="button" onClick={() => setGameDifficulty('hard')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${gameDifficulty === 'hard' ? 'bg-red-600 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>قورس</button>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-stone-700 mb-2">جۆری پرسیارەکان:</label>
+                  <label className="block text-sm font-bold text-stone-700 dark:text-stone-200 mb-2">جۆری پرسیارەکان:</label>
                   <div className="flex flex-col gap-2">
-                    <button type="button" onClick={() => setCardTypesAllowed('both')} className={`w-full py-2 px-3 rounded-lg font-bold text-sm transition-colors ${cardTypesAllowed === 'both' ? 'bg-stone-800 text-white' : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'}`}>هەردووکی (هەڵبژاردن و زانین)</button>
+                    <button type="button" onClick={() => setCardTypesAllowed('both')} className={`w-full py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${cardTypesAllowed === 'both' ? 'bg-stone-800 dark:bg-amber-600 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>هەردووکی (هەڵبژاردن و زانین)</button>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => setCardTypesAllowed('brainteaser')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors ${cardTypesAllowed === 'brainteaser' ? 'bg-pink-600 text-white' : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'}`}>تەنها هەڵبژاردن</button>
-                      <button type="button" onClick={() => setCardTypesAllowed('guess')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors ${cardTypesAllowed === 'guess' ? 'bg-sky-500 text-white' : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'}`}>تەنها زانین</button>
+                      <button type="button" onClick={() => setCardTypesAllowed('brainteaser')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${cardTypesAllowed === 'brainteaser' ? 'bg-pink-600 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>تەنها هەڵبژاردن</button>
+                      <button type="button" onClick={() => setCardTypesAllowed('guess')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${cardTypesAllowed === 'guess' ? 'bg-sky-500 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>تەنها زانین</button>
                     </div>
                   </div>
                 </div>
@@ -1549,13 +1589,13 @@ export default function App() {
                   value={newPlayerName}
                   onChange={(e) => setNewPlayerName(e.target.value)}
                   placeholder="ناوی یاریزان..."
-                  className="flex-1 px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold"
+                  className="flex-1 px-4 py-3 bg-stone-50 dark:bg-stone-800/90 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold"
                   disabled={players.length >= 6}
                 />
                 <button
                   type="submit"
                   disabled={!newPlayerName.trim() || players.length >= 6}
-                  className="px-5 py-3 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all active:scale-95"
+                  className="px-5 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
                 >
                   <UserPlus className="w-5 h-5" />
                 </button>
@@ -1563,7 +1603,7 @@ export default function App() {
 
               <div className="space-y-3 mb-8 min-h-[200px]">
                 {players.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-stone-400 font-bold border-2 border-dashed border-stone-200 rounded-xl p-8 text-center">
+                  <div className="h-full flex items-center justify-center text-stone-400 dark:text-stone-500 font-bold border-2 border-dashed border-stone-200 dark:border-stone-700 rounded-xl p-8 text-center">
                     هیچ یاریزانێک زیاد نەکراوە
                   </div>
                 ) : (
@@ -1572,13 +1612,13 @@ export default function App() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       key={player.id} 
-                      className="flex items-center justify-between bg-stone-50 px-4 py-3 rounded-xl border border-stone-200 shadow-sm"
+                      className="flex items-center justify-between bg-stone-50 dark:bg-stone-800/80 px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 shadow-sm"
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full ${player.color}`} />
-                        <span className="font-bold text-stone-700">{player.name}</span>
+                        <div className={`w-3.5 h-3.5 rounded-full ${player.color} shadow-sm`} />
+                        <span className="font-bold text-stone-700 dark:text-stone-200">{player.name}</span>
                       </div>
-                      <button onClick={() => removePlayer(player.id)} className="text-stone-400 hover:text-red-500 transition-colors p-1">
+                      <button onClick={() => removePlayer(player.id)} className="text-stone-400 hover:text-red-500 dark:hover:text-red-400 transition-colors p-1 cursor-pointer">
                         <X className="w-5 h-5" />
                       </button>
                     </motion.div>
@@ -1590,14 +1630,14 @@ export default function App() {
                 <button
                   onClick={startGame}
                   disabled={players.length < 2}
-                  className="w-full py-4 bg-emerald-700 text-white text-lg font-bold rounded-xl hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer"
+                  className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white text-lg font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer"
                 >
                   <PlayCircle className="w-6 h-6" />
                   <span>دەستپێکردنی یاری ناوخۆیی</span>
                 </button>
                 <button
                   onClick={() => setShowOnlineLobby(true)}
-                  className="w-full py-3.5 bg-sky-600 text-white text-base font-bold rounded-xl hover:bg-sky-700 flex items-center justify-center gap-2 shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white text-base font-bold rounded-xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   <Globe2 className="w-5 h-5" />
                   <span>دەستپێکردنی ژووری ئۆنلاین (فرە-یاریزان)</span>
@@ -1615,24 +1655,26 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 lg:p-6"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 lg:p-6"
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className={`w-full max-w-lg max-h-[95dvh] overflow-y-auto rounded-3xl p-6 lg:p-8 shadow-2xl border-4 ${
-                activeCardType === 'brainteaser' ? 'bg-pink-50 border-pink-500' : 'bg-sky-50 border-sky-500'
+              className={`w-full max-w-lg max-h-[95dvh] overflow-y-auto rounded-3xl p-6 lg:p-8 shadow-2xl border-4 transition-colors ${
+                activeCardType === 'brainteaser' 
+                  ? 'bg-pink-50 dark:bg-stone-900 border-pink-500 dark:border-pink-600 text-stone-900 dark:text-stone-100' 
+                  : 'bg-sky-50 dark:bg-stone-900 border-sky-500 dark:border-sky-600 text-stone-900 dark:text-stone-100'
               }`}
             >
-              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-black/10">
-                {activeCardType === 'brainteaser' && <Brain className="w-8 h-8 text-pink-600" />}
-                {activeCardType === 'guess' && <HelpCircle className="w-8 h-8 text-sky-600" />}
-                <h2 className="text-2xl font-black text-stone-800">
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-black/10 dark:border-white/10">
+                {activeCardType === 'brainteaser' && <Brain className="w-8 h-8 text-pink-600 dark:text-pink-400" />}
+                {activeCardType === 'guess' && <HelpCircle className="w-8 h-8 text-sky-600 dark:text-sky-400" />}
+                <h2 className="text-2xl font-black text-stone-800 dark:text-stone-100">
                   {activeCardType === 'brainteaser' ? 'کارتی هەڵبژاردن' : 'کارتی زانین'}
                 </h2>
                 
                 {timeLeft !== null && (
-                  <div className={`mr-auto flex items-center gap-2 font-black text-xl px-4 py-1.5 rounded-full ${timeLeft <= 5 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-stone-200 text-stone-700'}`}>
+                  <div className={`mr-auto flex items-center gap-2 font-black text-xl px-4 py-1.5 rounded-full ${timeLeft <= 5 ? 'bg-red-100 dark:bg-red-950/80 text-red-600 dark:text-red-400 animate-pulse' : 'bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300'}`}>
                     <Clock className="w-6 h-6" />
                     <span>{timeLeft}</span>
                   </div>
@@ -1642,21 +1684,21 @@ export default function App() {
               {/* Brainteaser Content */}
               {activeCardType === 'brainteaser' && (
                 <div className="space-y-6">
-                  <h3 className="text-xl font-bold text-stone-800 text-center leading-relaxed">{activeCardData.question}</h3>
+                  <h3 className="text-xl font-bold text-stone-800 dark:text-stone-100 text-center leading-relaxed">{activeCardData.question}</h3>
                   <div className="space-y-3">
                     {activeCardData.options.map((opt: string, idx: number) => (
                       <button
                         key={idx}
                         onClick={() => handleAnswer(idx === activeCardData.correctAnswer)}
                         disabled={!isMyTurn}
-                        className="w-full py-4 px-6 bg-white border-2 border-pink-200 rounded-xl font-bold text-stone-700 hover:bg-pink-100 hover:border-pink-400 transition-all text-right shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full py-4 px-6 bg-white dark:bg-stone-800/90 border-2 border-pink-200 dark:border-pink-800/60 rounded-xl font-bold text-stone-700 dark:text-stone-200 hover:bg-pink-100 dark:hover:bg-pink-950/50 hover:border-pink-400 dark:hover:border-pink-600 transition-all text-right shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                       >
                         {opt}
                       </button>
                     ))}
                   </div>
                   {!isMyTurn && (
-                    <p className="text-sm font-bold text-stone-500 text-center animate-pulse">
+                    <p className="text-sm font-bold text-stone-500 dark:text-stone-400 text-center animate-pulse">
                       چاوەڕێی {players[currentPlayerIndex]?.name} بە وەڵام هەڵبژێرێت...
                     </p>
                   )}
@@ -1666,14 +1708,14 @@ export default function App() {
               {/* Guess Content */}
               {activeCardType === 'guess' && (
                 <div className="space-y-6">
-                  <h3 className="text-lg font-bold text-stone-600 mb-4 text-center">نیشانەکان بخوێنەوە بزانە مەبەست چییە:</h3>
+                  <h3 className="text-lg font-bold text-stone-600 dark:text-stone-300 mb-4 text-center">نیشانەکان بخوێنەوە بزانە مەبەست چییە:</h3>
                   <div className="space-y-3">
                     {activeCardData.clues.map((clue: string, idx: number) => (
                       <motion.div 
                         key={idx}
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: idx <= clueIndex ? 1 : 0 }}
-                        className="p-4 bg-white rounded-xl border border-sky-200 font-bold text-stone-700 shadow-sm"
+                        className="p-4 bg-white dark:bg-stone-800/90 rounded-xl border border-sky-200 dark:border-sky-800/60 font-bold text-stone-700 dark:text-stone-200 shadow-sm"
                       >
                         {clue}
                       </motion.div>
@@ -1691,7 +1733,7 @@ export default function App() {
                               syncOnlineRoom({ clueIndex: nextIdx });
                             }}
                             disabled={!isMyTurn}
-                            className="flex-1 py-4 bg-white border-2 border-sky-300 text-sky-700 rounded-xl font-bold hover:bg-sky-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex-1 py-4 bg-white dark:bg-stone-800 border-2 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300 rounded-xl font-bold hover:bg-sky-50 dark:hover:bg-sky-950/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                           >
                             نیشانەی داهاتوو
                           </button>
@@ -1703,40 +1745,40 @@ export default function App() {
                             syncOnlineRoom({ showGuessAnswer: true, timeLeft: null });
                           }}
                           disabled={!isMyTurn}
-                          className="flex-1 py-4 bg-sky-600 text-white rounded-xl font-bold hover:bg-sky-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex-1 py-4 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                         >
                           بینینی وەڵام
                         </button>
                       </div>
                       {!isMyTurn && (
-                        <p className="text-sm font-bold text-stone-500 text-center animate-pulse">
+                        <p className="text-sm font-bold text-stone-500 dark:text-stone-400 text-center animate-pulse">
                           چاوەڕێی {players[currentPlayerIndex]?.name} بە بۆ پشکنینی وەڵام...
                         </p>
                       )}
                     </div>
                   ) : (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-sky-200 mt-6 text-center">
-                      <p className="text-sm font-bold text-stone-500 mb-2">وەڵام:</p>
-                      <p className="text-3xl font-black text-sky-800 mb-6">{activeCardData.answer}</p>
-                      <p className="text-stone-600 font-bold mb-4 text-lg">ئایا وەڵامەکەت ڕاست بوو؟</p>
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-sky-200 dark:border-sky-800 mt-6 text-center">
+                      <p className="text-sm font-bold text-stone-500 dark:text-stone-400 mb-2">وەڵام:</p>
+                      <p className="text-3xl font-black text-sky-800 dark:text-sky-300 mb-6">{activeCardData.answer}</p>
+                      <p className="text-stone-600 dark:text-stone-300 font-bold mb-4 text-lg">ئایا وەڵامەکەت ڕاست بوو؟</p>
                       <div className="flex gap-3">
                         <button 
                           onClick={() => handleAnswer(true)}
                           disabled={!isMyTurn}
-                          className="flex-1 py-4 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex-1 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                         >
                           <Check className="w-5 h-5"/> بەڵێ
                         </button>
                         <button 
                           onClick={() => handleAnswer(false)}
                           disabled={!isMyTurn}
-                          className="flex-1 py-4 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="flex-1 py-4 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                         >
                           <X className="w-5 h-5"/> نەخێر
                         </button>
                       </div>
                       {!isMyTurn && (
-                        <p className="text-sm font-bold text-stone-500 text-center mt-3 animate-pulse">
+                        <p className="text-sm font-bold text-stone-500 dark:text-stone-400 text-center mt-3 animate-pulse">
                           تەنها {players[currentPlayerIndex]?.name} دەتوانێت بڕیار لەسەر دروستی وەڵام بدات.
                         </p>
                       )}
@@ -1758,8 +1800,33 @@ export default function App() {
       {/* Online Multiplayer Lobby Modal */}
       <OnlineLobbyModal 
         isOpen={showOnlineLobby}
-        onClose={() => setShowOnlineLobby(false)}
+        initialRoomCode={initialOnlineRoomCode}
+        onClose={() => {
+          setShowOnlineLobby(false);
+          setInitialOnlineRoomCode(null);
+        }}
         onGameStart={handleOnlineGameStart}
+        onOpenLeaderboard={() => setShowLeaderboardModal(true)}
+      />
+
+      {/* Header Navigation Drawer (Hamburger Menu) */}
+      <HeaderNavDrawer
+        isOpen={showNavDrawer}
+        onClose={() => setShowNavDrawer(false)}
+        onOpenLeaderboard={() => setShowLeaderboardModal(true)}
+        onOpenOnlineLobby={() => setShowOnlineLobby(true)}
+        onPlayLocal={() => setGameState('setup')}
+        onOpenAndroidModal={() => setShowAndroidModal(true)}
+        onScrollToRules={scrollToRules}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+
+      {/* Leaderboard Modal (Most Wins & Most Played) */}
+      <LeaderboardModal
+        isOpen={showLeaderboardModal}
+        onClose={() => setShowLeaderboardModal(false)}
+        currentUserGoogleId={auth?.currentUser?.uid}
       />
 
     </div>

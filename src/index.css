@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Playpen Sans Arabic", cursive, sans-serif;
   --font-playpen: "Playpen Sans Arabic", cursive, sans-serif;
@@ -9,11 +11,27 @@
 :root {
   font-family: "Playpen Sans Arabic", cursive, sans-serif;
   font-optical-sizing: auto;
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html, body {
+  font-family: "Playpen Sans Arabic", cursive, sans-serif;
+  font-optical-sizing: auto;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 body {
-  font-family: "Playpen Sans Arabic", cursive, sans-serif;
-  font-optical-sizing: auto;
+  background-color: #fdfaf6;
+  color: #1c1917;
+}
+
+html.dark body {
+  background-color: #0c0a09;
+  color: #f5f5f4;
 }
 
 .gulzar-regular, .font-gulzar {
@@ -27,4 +45,3 @@ body {
   font-optical-sizing: auto;
   font-style: normal;
 }
-
