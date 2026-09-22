@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, ScrollText, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff, Menu, Sun, Moon } from 'lucide-react';
+import { Play, Pause, RotateCcw, Check, X, Dices, UserPlus, Trophy, FastForward, PlayCircle, AlertCircle, Maximize2, Minimize2, ChevronRight, ChevronLeft, Brain, HelpCircle, Layers, Palette, Users, Clock, ArrowDown, Gamepad2, SkipForward, Smartphone, Download, Globe2, Wifi, WifiOff, Menu, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { BRAINTEASERS, GUESS_CARDS, type Difficulty, type CardTypes } from './data/cards';
@@ -903,13 +903,6 @@ export default function App() {
     setOnlineConnected(false);
   };
 
-  const scrollToRules = () => {
-    const rulesElement = document.getElementById('rules-section');
-    if (rulesElement) {
-      rulesElement.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   const boardStyle = {
     backgroundImage: `url(${boardImage})`,
     backgroundSize: 'cover',
@@ -1382,13 +1375,6 @@ export default function App() {
                     <Globe2 className="w-5 h-5" />
                     یاریکردنی ئۆنلاین
                   </button>
-                  <button 
-                    onClick={scrollToRules}
-                    className="px-8 py-4 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 border-2 border-stone-200 dark:border-stone-700 text-lg font-bold rounded-xl hover:bg-stone-50 dark:hover:bg-stone-750 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <ScrollText className="w-5 h-5" />
-                    یاساکان
-                  </button>
                 </div>
               </div>
             </div>
@@ -1438,51 +1424,6 @@ export default function App() {
                 <span>کایەیەکی گونجاو بۆ تەمەنی ٨+</span>
                 <span className="hidden md:block w-px h-6 bg-stone-300 dark:bg-stone-700"></span>
                 <span>بۆ ٢-٦ یاریزان</span>
-              </div>
-            </div>
-          </section>
-
-          {/* Rules Section */}
-          <section id="rules-section" className="py-24 bg-[#fdfaf6] dark:bg-[#121019] transition-colors">
-            <div className="container mx-auto px-6 max-w-4xl">
-              <div className="text-center mb-16">
-                <h2 className="text-4xl font-black text-stone-900 dark:text-stone-100 mb-4">چۆنیەتی یاریکردن</h2>
-                <p className="text-xl text-stone-600 dark:text-stone-400 font-medium">یاساکان زۆر ئاسانن، با دەست پێبکەین!</p>
-              </div>
-
-              <div className="space-y-8">
-                <div className="bg-white dark:bg-stone-900/90 p-8 rounded-2xl shadow-sm border border-stone-200 dark:border-stone-800 flex flex-col sm:flex-row gap-6 items-start transition-colors">
-                  <div className="w-16 h-16 bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 rounded-2xl flex items-center justify-center shrink-0">
-                    <Trophy className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-3">ئامانجی یاری</h3>
-                    <p className="text-stone-600 dark:text-stone-300 leading-relaxed text-lg font-medium">ئامانجی یارییەکە ئەوەیە وەڵامی ڕاستی پرسیارەکان بدەیتەوە، فێرببیت دەربارەی پێنج پایەکەی ئیسلام، و یەکەم کەس بیت بگەیتە خاڵی کۆتایی بە زۆرترین خاڵەوە.</p>
-                  </div>
-                </div>
-
-                <div className="bg-white dark:bg-stone-900/90 p-8 rounded-2xl shadow-sm border border-stone-200 dark:border-stone-800 flex flex-col sm:flex-row gap-6 items-start transition-colors">
-                  <div className="w-16 h-16 bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-400 rounded-2xl flex items-center justify-center shrink-0">
-                    <Brain className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold text-stone-800 dark:text-stone-100 mb-3">کارتە دیجیتاڵییەکان</h3>
-                    <p className="text-stone-600 dark:text-stone-300 leading-relaxed text-lg mb-3 font-medium">لە نۆرەی خۆتدا، دەتوانیت کارتێک هەڵبژێریت ڕاستەوخۆ لەناو شاشەکەدا و وەڵامی بدەیتەوە!</p>
-                    <ul className="list-disc list-inside text-stone-600 dark:text-stone-300 space-y-2 text-lg font-medium">
-                      <li><strong>وەڵامی ڕاست:</strong> بەختی خۆت تاقیدەکەیتەوە و پارچەکەت دەبەیتە پێشەوە.</li>
-                      <li><strong>وەڵامی هەڵە:</strong> ڕاستەوخۆ نۆرەکەت کۆتایی دێت و لە جێگای خۆت دەمێنیتەوە.</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-16 text-center">
-                <button 
-                  onClick={() => setGameState('setup')}
-                  className="px-10 py-5 bg-stone-900 dark:bg-amber-600 hover:bg-stone-800 dark:hover:bg-amber-500 text-white text-xl font-bold rounded-2xl transition-all shadow-xl shadow-stone-900/20 active:scale-95 cursor-pointer"
-                >
-                  ئامادەیت؟ دەستپێبکە!
-                </button>
               </div>
             </div>
           </section>
@@ -1817,7 +1758,6 @@ export default function App() {
         onOpenOnlineLobby={() => setShowOnlineLobby(true)}
         onPlayLocal={() => setGameState('setup')}
         onOpenAndroidModal={() => setShowAndroidModal(true)}
-        onScrollToRules={scrollToRules}
         theme={theme}
         onToggleTheme={toggleTheme}
       />

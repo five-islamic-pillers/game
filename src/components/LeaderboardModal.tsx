@@ -251,16 +251,6 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-3.5 bg-[#f4eee4] dark:bg-stone-950/60 border-t border-stone-200 dark:border-stone-800 text-center shrink-0">
-          <button
-            onClick={onClose}
-            className="w-full py-2.5 bg-stone-900 hover:bg-stone-800 dark:bg-stone-800 dark:hover:bg-stone-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-          >
-            داخستن
-          </button>
-        </div>
-
       </div>
     </div>
   );
