@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
   Globe2, 
@@ -556,22 +557,51 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
     setTab('menu');
   };
 
-  if (!isOpen) return null;
+  // Handle ESC key to smoothly close
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        SoundManager.click();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const isHost = activeRoom?.hostId === myPlayerId;
 
   return (
-    <div 
-      id="online-lobby-modal-backdrop"
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 md:p-6 overflow-y-auto"
-      onClick={onClose}
-    >
-      <div 
-        id="online-lobby-modal-content"
-        dir="rtl"
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-xl bg-stone-900 border border-amber-500/40 rounded-3xl p-5 md:p-8 text-white shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
-      >
+    <AnimatePresence>
+      {isOpen && (
+        <div 
+          id="online-lobby-modal-backdrop"
+          className="fixed inset-0 z-[120] flex items-center justify-center p-3 md:p-6 overflow-y-auto"
+        >
+          {/* Backdrop with smooth fade in & fade out */}
+          <motion.div
+            key="online-lobby-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.24, ease: 'easeOut' }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md cursor-pointer"
+            onClick={onClose}
+          />
+
+          {/* Modal Content with smooth fade in/out */}
+          <motion.div 
+            key="online-lobby-modal-content"
+            id="online-lobby-modal-content"
+            dir="rtl"
+            initial={{ opacity: 0, scale: 0.95, y: 14 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-xl bg-stone-900 border border-amber-500/40 rounded-3xl p-5 md:p-8 text-white shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col z-10"
+          >
         {/* Glow Effects */}
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-56 h-56 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-56 h-56 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
@@ -615,7 +645,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
                 )}
                 <div className="truncate">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-black text-white block truncate">
+                    <span className="text-xs font-black text-white block truncate" dir="auto">
                       {currentUser.displayName || currentUser.email?.split('@')[0]}
                     </span>
                     <span 
@@ -688,7 +718,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
             </div>
         ) : (
           /* Google Account Prompt Banner */
-          <div className="mb-4 p-3 bg-gradient-to-l from-amber-950/40 via-stone-800 to-stone-850 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md shrink-0">
+          <div className="mb-4 p-3 bg-gradient-to-l from-amber-950/40 via-stone-800 to-stone-900 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md shrink-0">
             <div className="flex items-center gap-2.5 overflow-hidden w-full sm:w-auto">
               <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
                 <Trophy className="w-5 h-5" />
@@ -743,11 +773,15 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
                 <input 
                   id="online-player-name-input"
                   type="text"
+                  dir="auto"
+                  autoComplete="name"
+                  autoCorrect="off"
+                  spellCheck="false"
                   value={playerName}
                   onChange={(e) => updatePlayerName(e.target.value)}
                   placeholder="ناوی یاریزان بنووسە..."
-                  maxLength={20}
-                  className="flex-1 bg-stone-900 border border-stone-700/80 rounded-lg px-2.5 py-1 text-white font-bold text-xs focus:outline-none focus:border-amber-500 transition-colors placeholder-stone-500"
+                  maxLength={25}
+                  className="flex-1 bg-stone-900 border border-stone-700/80 rounded-lg px-2.5 py-1 text-white font-bold text-xs focus:outline-none focus:border-amber-500 transition-colors placeholder-stone-500 text-start"
                 />
               </div>
             )}
@@ -827,7 +861,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-xs font-bold text-white">{hostPlayer?.name || 'هۆست'}</span>
+                                    <span className="text-xs font-bold text-white truncate max-w-[120px]" dir="auto">{hostPlayer?.name || 'هۆست'}</span>
                                     <span className="text-[10px] text-stone-400 font-mono">#{room.roomCode}</span>
                                   </div>
                                   <div className="flex items-center gap-2 text-[10px] text-stone-400">
@@ -1048,10 +1082,10 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
                           key={p.id}
                           className="flex items-center justify-between p-2 rounded-xl bg-stone-800 border border-stone-700/60"
                         >
-                          <div className="flex items-center gap-2">
-                            <div className={`w-3.5 h-3.5 rounded-full ${p.color} border border-white/40 shadow-sm`} />
-                            <span className="font-bold text-white text-xs md:text-sm">
-                              {p.name} {p.id === myPlayerId && <span className="text-xs text-amber-400">(تۆ)</span>}
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-3.5 h-3.5 rounded-full ${p.color} border border-white/40 shadow-sm shrink-0`} />
+                            <span className="font-bold text-white text-xs md:text-sm truncate" dir="auto">
+                              {p.name} {p.id === myPlayerId && <span className="text-xs text-amber-400 font-sans">(تۆ)</span>}
                             </span>
                           </div>
                           {p.id === activeRoom.hostId && (
@@ -1102,7 +1136,9 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
                 </div>
               )}
             </div>
-      </div>
-    </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 };

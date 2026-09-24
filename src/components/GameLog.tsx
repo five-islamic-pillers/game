@@ -144,7 +144,7 @@ export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
 
                   <div className="flex-1 truncate leading-tight">
                     {log.playerName && (
-                      <span className="font-black text-stone-900 dark:text-stone-100 ml-1">
+                      <span className="font-black text-stone-900 dark:text-stone-100 ml-1 inline-block" dir="auto">
                         {log.playerName}:
                       </span>
                     )}
@@ -177,7 +177,7 @@ export const GameLog: React.FC<GameLogProps> = ({ logs, className = '' }) => {
               )}
               <div className="flex-1 truncate font-medium text-stone-700 dark:text-stone-300">
                 {latestLog.playerName && (
-                  <span className="font-black text-stone-900 dark:text-stone-100 ml-1">
+                  <span className="font-black text-stone-900 dark:text-stone-100 ml-1 inline-block" dir="auto">
                     {latestLog.playerName}:
                   </span>
                 )}

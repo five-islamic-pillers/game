@@ -19,7 +19,48 @@ export interface LeaderboardPlayer {
   gamesPlayed: number;
   wins: number;
   winRate?: number;
+  createdAt?: number;
   updatedAt: number;
+}
+
+/**
+ * Format how long the user has been playing since (Kurdish locale)
+ */
+export function formatPlayingSince(timestamp?: number): string {
+  if (!timestamp) return 'لە مێژە یاری دەکات';
+  const now = Date.now();
+  const diffMs = Math.max(0, now - timestamp);
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+
+  const date = new Date(timestamp);
+  const kurdishMonths = [
+    'کانوونی دووەم', 'شوبات', 'ئازار', 'نیسان', 'ئایار', 'حوزەیران',
+    'تەمووز', 'ئاب', 'ئەیلوول', 'تشرینی یەکەم', 'تشرینی دووەم', 'کانوونی یەکەم'
+  ];
+  const monthName = kurdishMonths[date.getMonth()];
+  const year = date.getFullYear();
+
+  if (diffDays < 1) {
+    if (diffHours < 1) {
+      if (diffMins <= 5) return 'کەمێک لەمەوبەر';
+      return `${diffMins} خولەک لەمەوبەرەوە`;
+    }
+    return `${diffHours} کاتژمێر لەمەوبەرەوە`;
+  }
+  if (diffDays === 1) return 'دوێنێوە';
+  if (diffDays < 7) return `${diffDays} ڕۆژ لەمەوبەرەوە`;
+  if (diffDays < 30) {
+    const weeks = Math.max(1, Math.floor(diffDays / 7));
+    return `${weeks} هەفتە لەمەوبەرەوە`;
+  }
+  if (diffMonths < 12) {
+    return `${monthName}ی ${year}`;
+  }
+  return `${monthName}ی ${year} (${diffYears} ساڵ)`;
 }
 
 // Clean up any legacy or temporary dummy entries from previous sessions
@@ -84,6 +125,7 @@ export async function getMostPlayedLeaderboard(limitCount = 30): Promise<Leaderb
       const gamesPlayed = Math.max(1, Number(data.gamesPlayed || 0));
       const wins = Math.max(0, Math.min(gamesPlayed, Number(data.wins || 0)));
       const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0;
+      const createdAt = Number(data.createdAt || data.updatedAt || Date.now());
 
       results.push({
         userId: id,
@@ -92,6 +134,7 @@ export async function getMostPlayedLeaderboard(limitCount = 30): Promise<Leaderb
         gamesPlayed,
         wins,
         winRate,
+        createdAt,
         updatedAt: Number(data.updatedAt || Date.now())
       });
     });
@@ -141,6 +184,7 @@ export async function getMostWinsLeaderboard(limitCount = 30): Promise<Leaderboa
       const gamesPlayed = Math.max(1, Number(data.gamesPlayed || 0));
       const wins = Math.max(0, Math.min(gamesPlayed, Number(data.wins || 0)));
       const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0;
+      const createdAt = Number(data.createdAt || data.updatedAt || Date.now());
 
       results.push({
         userId: id,
@@ -149,6 +193,7 @@ export async function getMostWinsLeaderboard(limitCount = 30): Promise<Leaderboa
         gamesPlayed,
         wins,
         winRate,
+        createdAt,
         updatedAt: Number(data.updatedAt || Date.now())
       });
     });
@@ -181,6 +226,7 @@ export async function getUserStats(userId: string): Promise<LeaderboardPlayer | 
     const data = snap.data();
     const gamesPlayed = Number(data.gamesPlayed || 0);
     const wins = Number(data.wins || 0);
+    const createdAt = Number(data.createdAt || data.updatedAt || Date.now());
     return {
       userId,
       displayName: data.displayName || 'یاریزان',
@@ -188,6 +234,7 @@ export async function getUserStats(userId: string): Promise<LeaderboardPlayer | 
       gamesPlayed,
       wins,
       winRate: gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0,
+      createdAt,
       updatedAt: Number(data.updatedAt || Date.now())
     };
   } catch (err) {
@@ -204,8 +251,9 @@ export async function recordPlayerGameResult(params: {
   displayName: string;
   photoURL?: string;
   isWinner: boolean;
+  createdAt?: number;
 }): Promise<void> {
-  const { userId, displayName, photoURL, isWinner } = params;
+  const { userId, displayName, photoURL, isWinner, createdAt } = params;
   
   // Guard against invalid or temporary IDs
   if (!userId || userId.startsWith('online_player_') || userId.startsWith('temp_') || userId.startsWith('dummy_')) {
@@ -228,6 +276,7 @@ export async function recordPlayerGameResult(params: {
 
       const nextGames = currentGames + 1;
       const nextWins = isWinner ? currentWins + 1 : currentWins;
+      const existingCreatedAt = Number(currentData.createdAt || currentData.updatedAt || createdAt || Date.now());
 
       await setDoc(
         docRef,
@@ -236,6 +285,7 @@ export async function recordPlayerGameResult(params: {
           ...(photoURL ? { photoURL } : {}),
           gamesPlayed: nextGames,
           wins: nextWins,
+          createdAt: existingCreatedAt,
           updatedAt: Date.now()
         },
         { merge: true }
@@ -249,6 +299,7 @@ export async function recordPlayerGameResult(params: {
           photoURL: photoURL || null,
           gamesPlayed: 1,
           wins: isWinner ? 1 : 0,
+          createdAt: createdAt || Date.now(),
           updatedAt: Date.now()
         },
         { merge: true }

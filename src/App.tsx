@@ -10,10 +10,13 @@ import { OnlineLobbyModal } from './components/OnlineLobbyModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
 import { HeaderNavDrawer } from './components/HeaderNavDrawer';
 import { RulesModal } from './components/RulesModal';
+import { EditProfileModal } from './components/EditProfileModal';
+import { TikTokIcon } from './components/TikTokIcon';
 import { GameLog } from './components/GameLog';
 import { ReactionsOverlay } from './components/ReactionsOverlay';
 import { subscribeToRoom, updateOnlineRoomState, sendOnlineReaction, subscribeToReactions, forfeitOnlineMatch } from './services/onlineGameService';
 import { recordPlayerGameResult } from './services/leaderboardService';
+import { subscribeToAuth, isProfilePhotoHidden, type AuthUser } from './services/authService';
 import { auth } from './firebase';
 import { SoundManager, type SoundToast } from './utils/sound';
 import { useTheme } from './utils/theme';
@@ -148,6 +151,16 @@ export default function App() {
   const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showNavDrawer, setShowNavDrawer] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeToAuth((user) => {
+      setAuthUser(user);
+    });
+    return () => unsub();
+  }, []);
 
   // Online Multiplayer States
   const [showOnlineLobby, setShowOnlineLobby] = useState(false);
@@ -169,6 +182,15 @@ export default function App() {
     } catch {
       // Ignore URL parsing errors
     }
+  }, []);
+
+  // Sync scroll position for glass-like header effect
+  useEffect(() => {
+    const handleWindowScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleWindowScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleWindowScroll);
   }, []);
   
   // Game Loop States
@@ -891,11 +913,16 @@ export default function App() {
             );
           });
 
+          const userCreatedAt = (currentUser as any)?.metadata?.creationTime 
+            ? new Date((currentUser as any).metadata.creationTime).getTime() 
+            : (currentUser as any)?.createdAt;
+
           recordPlayerGameResult({
             userId: currentUser.uid,
             displayName: userDisplayName,
             photoURL: currentUser.photoURL || undefined,
-            isWinner
+            isWinner,
+            createdAt: userCreatedAt
           });
         }
       } catch (e) {
@@ -1199,11 +1226,11 @@ export default function App() {
                       )}
                     </div>
                     <div className="flex items-center gap-1 truncate max-w-[85px] md:max-w-[130px]">
-                      <span className={`text-xs md:text-sm truncate ${isCurrentPlayer ? 'font-black text-amber-950 dark:text-amber-200' : 'font-bold text-stone-700 dark:text-stone-200'}`}>
+                      <span className={`text-xs md:text-sm truncate ${isCurrentPlayer ? 'font-black text-amber-950 dark:text-amber-200' : 'font-bold text-stone-700 dark:text-stone-200'}`} dir="auto">
                         {player.name}
                       </span>
                       {isCurrentPlayer && (
-                        <span className="shrink-0 px-1 py-0.2 bg-amber-600 text-[9px] md:text-[10px] text-white font-black rounded-full leading-tight animate-pulse">
+                        <span className="shrink-0 px-1 py-0.2 bg-amber-600 text-[9px] md:text-[10px] text-white font-black rounded-full leading-tight animate-pulse font-sans">
                           نۆرەیە
                         </span>
                       )}
@@ -1279,7 +1306,7 @@ export default function App() {
                 <div className={`absolute top-0 left-0 w-full h-1 md:h-2 ${players[currentPlayerIndex]?.color || 'bg-amber-600'}`} />
                 <div className="flex items-center justify-center gap-2 mb-1 mt-0.5">
                   <span className="text-[10px] md:text-xs font-bold text-stone-500 dark:text-stone-400 uppercase tracking-wider">نۆرەی یاریزان</span>
-                  <span className="text-xs md:text-base font-black text-stone-900 dark:text-stone-100 truncate max-w-[120px] md:max-w-[180px]">{players[currentPlayerIndex]?.name || 'یاریزان'}</span>
+                  <span className="text-xs md:text-base font-black text-stone-900 dark:text-stone-100 truncate max-w-[120px] md:max-w-[180px]" dir="auto">{players[currentPlayerIndex]?.name || 'یاریزان'}</span>
                   {onlineRoomCode && (
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isMyTurn ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 animate-pulse' : 'bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400'}`}>
                       {isMyTurn ? 'نۆرەی تۆیە!' : 'چاوەڕێ بە...'}
@@ -1438,74 +1465,98 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
+            onScroll={(e) => {
+              setIsScrolled(e.currentTarget.scrollTop > 15);
+            }}
             className="absolute inset-0 z-40 bg-[#fdfaf6] dark:bg-[#14111c] text-stone-900 dark:text-stone-100 overflow-y-auto transition-colors"
           >
-            {/* Navbar with Off-white Theme and Dark/Light Mode toggle */}
-          <nav className="sticky top-0 z-50 bg-[#faf8f5]/90 dark:bg-stone-900/90 backdrop-blur-lg border-b border-stone-200 dark:border-stone-800 px-4 md:px-8 py-3.5 flex items-center justify-between shadow-sm transition-colors">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl md:text-4xl font-black text-amber-700 dark:text-amber-500">٥</span>
-              <div className="flex flex-col leading-tight">
-                <span className="font-bold text-stone-700 dark:text-stone-300 text-xs md:text-sm">یاری خێزانی</span>
-                <span className="font-black text-lg md:text-xl text-red-700 dark:text-red-500">پێنج پایەکەی ئیسلام</span>
+            {/* Navbar with Liquid Glass Effect on Scroll and Dark/Light Mode toggle */}
+            <nav 
+              className={`sticky top-0 z-50 px-3.5 sm:px-6 md:px-8 py-3 sm:py-3.5 flex items-center justify-between transition-all duration-300 ${
+                isScrolled
+                  ? 'bg-white/70 dark:bg-stone-900/75 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.45)] border-b border-stone-200/80 dark:border-stone-800/80 ring-1 ring-black/5 dark:ring-white/10'
+                  : 'bg-[#faf8f5]/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 shadow-sm'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <span className="text-2xl sm:text-3xl md:text-4xl font-black text-amber-700 dark:text-amber-500">٥</span>
+                <div className="flex flex-col leading-tight">
+                  <span className="font-bold text-stone-700 dark:text-stone-300 text-[10px] sm:text-xs md:text-sm">یاری خێزانی</span>
+                  <span className="font-black text-sm sm:text-lg md:text-xl text-red-700 dark:text-red-500">پێنج پایەکەی ئیسلام</span>
+                </div>
               </div>
-            </div>
 
-            {/* Header controls: Sound toggle, Dark/Light toggle and Three-line Hamburger menu */}
-            <div className="flex items-center gap-2">
-              <button
-                id="header-sound-toggle-btn"
-                type="button"
-                onClick={() => {
-                  SoundManager.toggleMute();
-                }}
-                className={`p-2.5 rounded-xl border shadow-sm transition-all cursor-pointer active:scale-95 ${
-                  isSoundMuted
-                    ? 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60'
-                    : 'bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 border-stone-200/90 dark:border-stone-700/80'
-                }`}
-                title={isSoundMuted ? 'بێدەنگکراوە - کرتە بکە بۆ چالاککردنی دەنگ' : 'دەنگ چالاکە - کرتە بکە بۆ بێدەنگکردن'}
-                aria-label="Toggle sound"
-              >
-                {isSoundMuted ? (
-                  <VolumeX className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-                ) : (
-                  <Volume2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                )}
-              </button>
+              {/* Header controls: Leaderboard, Sound toggle, Dark/Light toggle and Three-line Hamburger menu */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Leaderboard Button (Icon Only) */}
+                <button
+                  id="header-leaderboard-btn"
+                  type="button"
+                  onClick={() => {
+                    SoundManager.click();
+                    setShowLeaderboardModal(true);
+                  }}
+                  className="p-2 sm:p-2.5 bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 text-amber-900 dark:text-amber-300 rounded-xl border border-amber-500/35 dark:border-amber-500/40 shadow-sm transition-all cursor-pointer group"
+                  title="ڕیزبەندی یاریزانان"
+                  aria-label="ڕیزبەندی یاریزانان"
+                >
+                  <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 dark:text-amber-400 group-hover:scale-110 group-hover:rotate-12 transition-transform" />
+                </button>
 
-              <button
-                id="header-theme-toggle-btn"
-                type="button"
-                onClick={() => {
-                  SoundManager.click();
-                  toggleTheme();
-                }}
-                className="p-2.5 bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 active:scale-95 text-stone-700 dark:text-stone-200 rounded-xl border border-stone-200/90 dark:border-stone-700/80 shadow-sm transition-all cursor-pointer"
-                title={theme === 'dark' ? 'گۆڕین بۆ دۆخی ڕووناک' : 'گۆڕین بۆ دۆخی تاریک'}
-                aria-label="Toggle theme"
-              >
-                {theme === 'dark' ? (
-                  <Sun className="w-5 h-5 text-amber-400" />
-                ) : (
-                  <Moon className="w-5 h-5 text-stone-700" />
-                )}
-              </button>
+                <button
+                  id="header-sound-toggle-btn"
+                  type="button"
+                  onClick={() => {
+                    SoundManager.toggleMute();
+                  }}
+                  className={`p-2 sm:p-2.5 rounded-xl border shadow-sm transition-all cursor-pointer active:scale-95 ${
+                    isSoundMuted
+                      ? 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/60'
+                      : 'bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 border-stone-200/90 dark:border-stone-700/80'
+                  }`}
+                  title={isSoundMuted ? 'بێدەنگکراوە - کرتە بکە بۆ چالاککردنی دەنگ' : 'دەنگ چالاکە - کرتە بکە بۆ بێدەنگکردن'}
+                  aria-label="Toggle sound"
+                >
+                  {isSoundMuted ? (
+                    <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-rose-600 dark:text-rose-400" />
+                  ) : (
+                    <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 dark:text-emerald-400" />
+                  )}
+                </button>
 
-              <button 
-                id="header-hamburger-menu-btn"
-                type="button"
-                onClick={() => {
-                  SoundManager.click();
-                  setShowNavDrawer(true);
-                }}
-                className="flex items-center gap-2 px-3.5 md:px-4 py-2.5 bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 active:scale-95 text-stone-800 dark:text-stone-100 rounded-xl text-sm font-black shadow-sm border border-stone-200/90 dark:border-stone-700/80 transition-all cursor-pointer group"
-                title="پێڕستی سەرەکی"
-              >
-                <Menu className="w-5 h-5 text-amber-600 dark:text-amber-400 group-hover:rotate-180 transition-transform duration-300" />
-                <span>پێڕست</span>
-              </button>
-            </div>
-          </nav>
+                <button
+                  id="header-theme-toggle-btn"
+                  type="button"
+                  onClick={() => {
+                    SoundManager.click();
+                    toggleTheme();
+                  }}
+                  className="p-2 sm:p-2.5 bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 active:scale-95 text-stone-700 dark:text-stone-200 rounded-xl border border-stone-200/90 dark:border-stone-700/80 shadow-sm transition-all cursor-pointer"
+                  title={theme === 'dark' ? 'گۆڕین بۆ دۆخی ڕووناک' : 'گۆڕین بۆ دۆخی تاریک'}
+                  aria-label="Toggle theme"
+                >
+                  {theme === 'dark' ? (
+                    <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+                  ) : (
+                    <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-stone-700" />
+                  )}
+                </button>
+
+                <button 
+                  id="header-hamburger-menu-btn"
+                  type="button"
+                  onClick={() => {
+                    SoundManager.click();
+                    setShowNavDrawer(true);
+                  }}
+                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 active:scale-95 text-stone-800 dark:text-stone-100 rounded-xl text-xs sm:text-sm font-black shadow-sm border border-stone-200/90 dark:border-stone-700/80 transition-all cursor-pointer group"
+                  title="پێڕستی سەرەکی"
+                >
+                  <Menu className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 dark:text-amber-400 group-hover:rotate-180 transition-transform duration-300" />
+                  <span>پێڕست</span>
+                </button>
+              </div>
+            </nav>
 
           {/* Hero Section */}
           <header 
@@ -1567,7 +1618,7 @@ export default function App() {
           </header>
 
           {/* Cards Image Section */}
-          <section className="py-16 bg-[#fdfaf6] dark:bg-stone-950 border-y border-stone-200 dark:border-stone-850 transition-colors">
+          <section className="py-16 bg-[#fdfaf6] dark:bg-stone-950 border-y border-stone-200 dark:border-stone-800 transition-colors">
             <div className="container mx-auto px-6 text-center flex flex-col items-center">
               <div className="flex gap-8 md:gap-16 justify-center items-center mb-10">
                 
@@ -1617,17 +1668,28 @@ export default function App() {
           {/* Footer */}
           <footer className="py-8 bg-stone-100 dark:bg-stone-900 text-center text-stone-500 dark:text-stone-400 text-sm font-bold border-t border-stone-200 dark:border-stone-800 transition-colors">
             <div className="container mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p>دروستکراوە لەلایەن میر صڵاح بۆ کەناڵی ئافەرین , Copyright 2026</p>
+              <p>
+                دروستکراوە لەلایەن{' '}
+                <a 
+                  href="https://five-islamic-pillers.github.io/me/" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 hover:underline font-black transition-colors"
+                >
+                  میر صڵاح
+                </a>
+                {' '}بۆ کەناڵی ئافەرین , Copyright 2026
+              </p>
               <div className="flex items-center gap-4">
                 <a 
                   href="https://www.tiktok.com/@five_islamic_pillers"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-stone-800 dark:text-stone-200 hover:text-amber-600 dark:hover:text-amber-400 font-bold transition-colors"
+                  className="inline-flex items-center gap-1.5 text-xs text-stone-800 dark:text-stone-200 hover:text-stone-950 dark:hover:text-white font-bold transition-colors group"
                 >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.82 4.46v-7.39a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-2.92-1.16 4.78 4.78 0 0 1-1.08-3z"/>
-                  </svg>
+                  <div className="w-5 h-5 rounded-md bg-black flex items-center justify-center p-0.5 group-hover:scale-110 transition-transform shadow-xs">
+                    <TikTokIcon className="w-3.5 h-3.5" variant="color" />
+                  </div>
                   <span>پەیجی تیکتۆک</span>
                 </a>
                 <span className="text-stone-300 dark:text-stone-700">|</span>
@@ -1701,82 +1763,250 @@ export default function App() {
             transition={{ duration: 0.5 }}
             className="absolute inset-0 z-40 flex items-center justify-center p-6 bg-stone-900/80 backdrop-blur-md"
           >
-            <div className="w-full max-w-md max-h-[95dvh] overflow-y-auto bg-white dark:bg-stone-900 p-8 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 text-stone-900 dark:text-stone-100 transition-colors">
-              <button 
-                onClick={() => setGameState('landing')}
-                className="mb-6 text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-100 flex items-center gap-1 transition-colors text-sm font-bold cursor-pointer"
-              >
-                <ChevronRight className="w-4 h-4" />
-                گەڕانەوە
-              </button>
-              <h1 className="text-3xl font-black mb-2 text-center text-emerald-800 dark:text-emerald-400">ڕێکخستنی یاری</h1>
-              <p className="text-stone-500 dark:text-stone-400 mb-6 text-center text-sm font-bold">٢ بۆ ٦ یاریزان زیاد بکە بۆ دەستپێکردن</p>
+            <div className="w-full max-w-lg max-h-[94vh] overflow-y-auto bg-[#faf8f5] dark:bg-stone-900 p-5 sm:p-7 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 text-stone-900 dark:text-white transition-colors flex flex-col space-y-5">
               
-              <div className="bg-stone-50 dark:bg-stone-800/80 p-4 rounded-xl border border-stone-200 dark:border-stone-700 mb-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-stone-700 dark:text-stone-200 mb-2">ئاستی سەختی پرسیارەکان:</label>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setGameDifficulty('easy')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${gameDifficulty === 'easy' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>ئاسان</button>
-                    <button type="button" onClick={() => setGameDifficulty('medium')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${gameDifficulty === 'medium' ? 'bg-amber-500 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>مامناوەند</button>
-                    <button type="button" onClick={() => setGameDifficulty('hard')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${gameDifficulty === 'hard' ? 'bg-red-600 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>قورس</button>
+              {/* Modern Header */}
+              <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/35 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm shrink-0">
+                    <Gamepad2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg sm:text-xl font-black text-stone-900 dark:text-white flex items-center gap-2">
+                      <span>ڕێکخستنی یاری ناوخۆیی</span>
+                    </h1>
+                    <p className="text-xs text-stone-500 dark:text-stone-400 font-medium">
+                      دیاریکردنی یاساکان و زیادکردنی یاریزانان (٢-٦)
+                    </p>
                   </div>
                 </div>
+
+                <button 
+                  onClick={() => {
+                    SoundManager.click();
+                    setGameState('landing');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-stone-200/70 hover:bg-stone-300 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-white flex items-center gap-1 transition-colors text-xs font-bold cursor-pointer"
+                  title="گەڕانەوە بۆ پەڕەی سەرەکی"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  <span>گەڕانەوە</span>
+                </button>
+              </div>
+
+              {/* Game Options Section */}
+              <div className="bg-[#f4eee4] dark:bg-stone-950/60 p-4 rounded-2xl border border-stone-200/80 dark:border-stone-800 space-y-4">
+                {/* Difficulty Selector */}
                 <div>
-                  <label className="block text-sm font-bold text-stone-700 dark:text-stone-200 mb-2">جۆری پرسیارەکان:</label>
-                  <div className="flex flex-col gap-2">
-                    <button type="button" onClick={() => setCardTypesAllowed('both')} className={`w-full py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${cardTypesAllowed === 'both' ? 'bg-stone-800 dark:bg-amber-600 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>هەردووکی (هەڵبژاردن و زانین)</button>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => setCardTypesAllowed('brainteaser')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${cardTypesAllowed === 'brainteaser' ? 'bg-pink-600 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>تەنها هەڵبژاردن</button>
-                      <button type="button" onClick={() => setCardTypesAllowed('guess')} className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition-colors cursor-pointer ${cardTypesAllowed === 'guess' ? 'bg-sky-500 text-white shadow-sm' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}`}>تەنها زانین</button>
-                    </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-black text-stone-700 dark:text-stone-300">ئاستی سەختی پرسیارەکان:</label>
+                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      {gameDifficulty === 'easy' ? 'ئاسان' : gameDifficulty === 'medium' ? 'مامناوەند' : 'قورس'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button 
+                      type="button" 
+                      onClick={() => { SoundManager.click(); setGameDifficulty('easy'); }} 
+                      className={`py-2 px-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        gameDifficulty === 'easy' 
+                          ? 'bg-emerald-600 text-white shadow-md' 
+                          : 'bg-[#faf8f5] dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                      <span>ئاسان</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => { SoundManager.click(); setGameDifficulty('medium'); }} 
+                      className={`py-2 px-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        gameDifficulty === 'medium' 
+                          ? 'bg-amber-600 text-white shadow-md' 
+                          : 'bg-[#faf8f5] dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                      <span>مامناوەند</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => { SoundManager.click(); setGameDifficulty('hard'); }} 
+                      className={`py-2 px-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        gameDifficulty === 'hard' 
+                          ? 'bg-red-600 text-white shadow-md' 
+                          : 'bg-[#faf8f5] dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+                      <span>قورس</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Card Types Selector */}
+                <div>
+                  <label className="block text-xs font-black text-stone-700 dark:text-stone-300 mb-2">جۆری پرسیار و کارتەکان:</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button 
+                      type="button" 
+                      onClick={() => { SoundManager.click(); setCardTypesAllowed('both'); }} 
+                      className={`py-2 px-2 rounded-xl font-black text-[11px] sm:text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        cardTypesAllowed === 'both' 
+                          ? 'bg-amber-700 text-white shadow-md' 
+                          : 'bg-[#faf8f5] dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      <Dices className="w-3.5 h-3.5" />
+                      <span>هەردووکی</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => { SoundManager.click(); setCardTypesAllowed('brainteaser'); }} 
+                      className={`py-2 px-2 rounded-xl font-black text-[11px] sm:text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        cardTypesAllowed === 'brainteaser' 
+                          ? 'bg-pink-600 text-white shadow-md' 
+                          : 'bg-[#faf8f5] dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      <Brain className="w-3.5 h-3.5" />
+                      <span>هەڵبژاردن</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => { SoundManager.click(); setCardTypesAllowed('guess'); }} 
+                      className={`py-2 px-2 rounded-xl font-black text-[11px] sm:text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        cardTypesAllowed === 'guess' 
+                          ? 'bg-sky-600 text-white shadow-md' 
+                          : 'bg-[#faf8f5] dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
+                      }`}
+                    >
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      <span>تەنها زانین</span>
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <form onSubmit={handleAddPlayer} className="flex gap-2 mb-6">
-                <input
-                  type="text"
-                  value={newPlayerName}
-                  onChange={(e) => setNewPlayerName(e.target.value)}
-                  placeholder="ناوی یاریزان..."
-                  className="flex-1 px-4 py-3 bg-stone-50 dark:bg-stone-800/90 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold"
-                  disabled={players.length >= 6}
-                />
-                <button
-                  type="submit"
-                  disabled={!newPlayerName.trim() || players.length >= 6}
-                  className="px-5 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
-                >
-                  <UserPlus className="w-5 h-5" />
-                </button>
-              </form>
+              {/* Player Input Form */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-stone-700 dark:text-stone-300">
+                    زیادکردنی یاریزانان:
+                  </span>
+                  <span className="text-[11px] font-bold text-stone-400">
+                    {players.length} لە ٦ یاریزان زیادکراوە
+                  </span>
+                </div>
 
-              <div className="space-y-3 mb-8 min-h-[200px]">
+                <form onSubmit={handleAddPlayer} className="flex gap-2">
+                  <div className="relative flex-1">
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+                      <div className={`w-3.5 h-3.5 rounded-full ${PLAYER_COLORS[players.length % PLAYER_COLORS.length]} shadow-xs ring-2 ring-white/60 dark:ring-black/60`} />
+                    </div>
+                    <input
+                      type="text"
+                      dir="auto"
+                      autoComplete="name"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      maxLength={25}
+                      value={newPlayerName}
+                      onChange={(e) => setNewPlayerName(e.target.value)}
+                      placeholder={players.length >= 6 ? "تەواوی ٦ یاریزان زیادکراوە" : `ناوی یاریزانی ${players.length + 1}...`}
+                      className="w-full pr-9 pl-4 py-3 bg-[#faf8f5] dark:bg-stone-800/90 border-2 border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-500 rounded-2xl focus:outline-none focus:border-emerald-500 transition-colors font-bold text-sm"
+                      disabled={players.length >= 6}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!newPlayerName.trim() || players.length >= 6}
+                    className="px-5 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl font-black text-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer shrink-0"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>زیادکردن</span>
+                  </button>
+                </form>
+
+                {/* Quick Add Logged-in User Chip */}
+                {authUser?.displayName && players.length < 6 && !players.some(p => p.name === authUser.displayName) && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[11px] font-bold text-stone-400">پێشنیار:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        SoundManager.click();
+                        if (players.length < 6 && authUser.displayName) {
+                          setPlayers([...players, {
+                            id: crypto.randomUUID(),
+                            name: authUser.displayName,
+                            score: 0,
+                            color: PLAYER_COLORS[players.length],
+                            position: 1
+                          }]);
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1"
+                    >
+                      <UserPlus className="w-3 h-3" />
+                      <span>خۆت ({authUser.displayName})</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Player Roster List */}
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
                 {players.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-stone-400 dark:text-stone-500 font-bold border-2 border-dashed border-stone-200 dark:border-stone-700 rounded-xl p-8 text-center">
-                    هیچ یاریزانێک زیاد نەکراوە
+                  <div className="py-7 flex flex-col items-center justify-center text-stone-400 dark:text-stone-500 font-bold border-2 border-dashed border-stone-200 dark:border-stone-800 rounded-2xl text-center gap-2">
+                    <Users className="w-8 h-8 opacity-40" />
+                    <span className="text-xs">هیچ یاریزانێک زیاد نەکراوە — ناو بنووسە لە سەرەوە</span>
                   </div>
                 ) : (
-                  players.map((player) => (
+                  players.map((player, idx) => (
                     <motion.div 
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
                       key={player.id} 
-                      className="flex items-center justify-between bg-stone-50 dark:bg-stone-800/80 px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 shadow-sm"
+                      className="flex items-center justify-between bg-[#f4eee4] dark:bg-stone-950/60 px-3.5 py-2.5 rounded-2xl border border-stone-200/80 dark:border-stone-800 shadow-xs"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-3.5 h-3.5 rounded-full ${player.color} shadow-sm`} />
-                        <span className="font-bold text-stone-700 dark:text-stone-200">{player.name}</span>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-6 h-6 rounded-lg bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 text-xs font-black flex items-center justify-center shrink-0">
+                          {idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            SoundManager.click();
+                            const curIdx = PLAYER_COLORS.indexOf(player.color);
+                            const nextCol = PLAYER_COLORS[(curIdx + 1) % PLAYER_COLORS.length];
+                            setPlayers(prev => prev.map(p => p.id === player.id ? { ...p, color: nextCol } : p));
+                          }}
+                          title="کرتە بکە بۆ گۆڕینی ڕەنگی مووروەکە"
+                          className={`w-6 h-6 rounded-full ${player.color} shadow-sm ring-2 ring-white/80 dark:ring-stone-900 shrink-0 cursor-pointer hover:scale-110 active:scale-95 transition-transform`}
+                        />
+                        <span className="font-black text-sm text-stone-800 dark:text-stone-100 truncate" dir="auto">
+                          {player.name}
+                        </span>
                       </div>
-                      <button onClick={() => removePlayer(player.id)} className="text-stone-400 hover:text-red-500 dark:hover:text-red-400 transition-colors p-1 cursor-pointer">
-                        <X className="w-5 h-5" />
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          SoundManager.click();
+                          removePlayer(player.id);
+                        }} 
+                        className="w-8 h-8 rounded-xl hover:bg-rose-500/15 text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
+                        title="سڕینەوەی یاریزان"
+                      >
+                        <X className="w-4 h-4" />
                       </button>
                     </motion.div>
                   ))
                 )}
               </div>
 
-              <div className="space-y-3">
+              {/* Start Button - Restored to Old Button Size, Shape, and Color */}
+              <div className="space-y-2 pt-2">
                 <button
                   onClick={startGame}
                   disabled={players.length < 2}
@@ -1785,13 +2015,12 @@ export default function App() {
                   <PlayCircle className="w-6 h-6" />
                   <span>دەستپێکردنی یاری ناوخۆیی</span>
                 </button>
-                <button
-                  onClick={() => setShowOnlineLobby(true)}
-                  className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white text-base font-bold rounded-xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-95 cursor-pointer"
-                >
-                  <Globe2 className="w-5 h-5" />
-                  <span>دەستپێکردنی ژووری ئۆنلاین (فرە-یاریزان)</span>
-                </button>
+
+                {players.length < 2 && (
+                  <p className="text-center text-[11px] text-amber-600 dark:text-amber-400 font-bold">
+                    بۆ دەستپێکردنی یاری، پێویستە بەلایەنی کەم ٢ یاریزان زیاد بکەیت
+                  </p>
+                )}
               </div>
             </div>
           </motion.div>
@@ -1964,8 +2193,6 @@ export default function App() {
         isOpen={showNavDrawer}
         onClose={() => setShowNavDrawer(false)}
         onOpenLeaderboard={() => setShowLeaderboardModal(true)}
-        onOpenOnlineLobby={() => setShowOnlineLobby(true)}
-        onPlayLocal={() => setGameState('setup')}
         onOpenRules={() => setShowRulesModal(true)}
         onOpenAndroidModal={() => setShowAndroidModal(true)}
         theme={theme}
@@ -1982,7 +2209,14 @@ export default function App() {
       <LeaderboardModal
         isOpen={showLeaderboardModal}
         onClose={() => setShowLeaderboardModal(false)}
-        currentUserGoogleId={auth?.currentUser?.uid}
+        currentUserGoogleId={authUser?.uid || auth?.currentUser?.uid}
+      />
+
+      {/* Edit Profile & Username Modal */}
+      <EditProfileModal
+        isOpen={showEditProfileModal}
+        onClose={() => setShowEditProfileModal(false)}
+        currentUser={authUser}
       />
 
       {/* Subtle Visual Toast Notification for Sound Mute/Unmute Confirmation */}
