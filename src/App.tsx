@@ -1678,7 +1678,7 @@ export default function App() {
                 >
                   میر صڵاح
                 </a>
-                {' '}بۆ کەناڵی ئافەرین , Copyright 2026
+                {' '}, Copyright 2026
               </p>
               <div className="flex items-center gap-4">
                 <a 
