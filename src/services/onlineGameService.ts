@@ -111,11 +111,17 @@ export async function createOnlineRoom(
 
 export async function joinOnlineRoom(
   roomCode: string, 
-  playerName: string
+  playerName: string,
+  existingPlayerId?: string | null
 ): Promise<{ playerId: string; roomData?: OnlineRoomData } | { error: string }> {
   const cleanCode = normalizeRoomCode(roomCode);
   if (!cleanCode) {
     return { error: 'تکایە کۆدی ژوورەکە بنووسە.' };
+  }
+
+  const rawName = playerName.trim();
+  if (!rawName) {
+    return { error: 'تکایە ناوی یاریزان بنووسە.' };
   }
 
   const roomRef = doc(db, 'rooms', cleanCode);
@@ -126,31 +132,32 @@ export async function joinOnlineRoom(
   }
 
   const data = snap.data() as OnlineRoomData;
-  const existingPlayer = data.players?.find(
-    p => p.name.trim().toLowerCase() === playerName.trim().toLowerCase()
+  const sameNamePlayer = data.players?.find(
+    p => p.name.trim().toLowerCase() === rawName.toLowerCase()
   );
 
-  if (data.status !== 'lobby') {
-    if (existingPlayer) {
-      return { playerId: existingPlayer.id, roomData: data };
+  // If a player with the exact same name is already in the room
+  if (sameNamePlayer) {
+    if (existingPlayerId && sameNamePlayer.id === existingPlayerId) {
+      return { playerId: sameNamePlayer.id, roomData: data };
     }
-    return { error: 'ئەم یارییە پێشتر دەستی پێکردووە.' };
+    return { error: `ناوی "${rawName}" پێشتر لەم ژوورەدا لەلایەن یاریزانێکی ترەوە گیراوە! تکایە ناوێکی جیاواز بنووسە.` };
   }
 
-  if (existingPlayer) {
-    return { playerId: existingPlayer.id, roomData: data };
+  if (data.status !== 'lobby') {
+    return { error: 'ئەم یارییە پێشتر دەستی پێکردووە.' };
   }
 
   if (data.players && data.players.length >= 6) {
     return { error: 'ژوورەکە پڕ بووە (زۆرترین ٦ یاریزان).' };
   }
 
-  const playerId = 'player_' + Math.random().toString(36).substring(2, 9);
+  const playerId = existingPlayerId || ('player_' + Math.random().toString(36).substring(2, 9));
   const colorIndex = (data.players || []).length % PLAYER_COLORS.length;
   
   const newPlayer: Player = {
     id: playerId,
-    name: playerName.trim() || `یاریزان ${(data.players || []).length + 1}`,
+    name: rawName,
     score: 0,
     color: PLAYER_COLORS[colorIndex],
     position: 1,
@@ -177,7 +184,7 @@ export async function joinOnlineRoom(
   return { playerId, roomData: { ...data, players: updatedPlayers, gameLogs: updatedLogs } };
 }
 
-export async function findQuickMatchRoom(): Promise<OnlineRoomData | null> {
+export async function findQuickMatchRoom(playerName?: string): Promise<OnlineRoomData | null> {
   try {
     const q = query(
       collection(db, 'rooms'),
@@ -187,6 +194,7 @@ export async function findQuickMatchRoom(): Promise<OnlineRoomData | null> {
     const snap = await getDocs(q);
     const now = Date.now();
     const candidateRooms: OnlineRoomData[] = [];
+    const cleanPlayerName = playerName?.trim().toLowerCase();
     
     snap.forEach((docSnap) => {
       const room = docSnap.data() as OnlineRoomData;
@@ -199,6 +207,10 @@ export async function findQuickMatchRoom(): Promise<OnlineRoomData | null> {
         room.updatedAt &&
         now - room.updatedAt < 15 * 60 * 1000
       ) {
+        // Disallow joining if player name is already in the room
+        if (cleanPlayerName && room.players.some(p => p.name.trim().toLowerCase() === cleanPlayerName)) {
+          return;
+        }
         candidateRooms.push(room);
       }
     });

@@ -408,7 +408,7 @@ export const OnlineLobbyModal: React.FC<OnlineLobbyModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const foundRoom = await findQuickMatchRoom();
+      const foundRoom = await findQuickMatchRoom(playerName);
 
       if (foundRoom) {
         const res = await joinOnlineRoom(foundRoom.roomCode, playerName);

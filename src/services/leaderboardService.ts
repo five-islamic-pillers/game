@@ -16,6 +16,7 @@ export interface LeaderboardPlayer {
   userId: string;
   displayName: string;
   photoURL?: string;
+  photoHidden?: boolean;
   gamesPlayed: number;
   wins: number;
   winRate?: number;
@@ -131,6 +132,7 @@ export async function getMostPlayedLeaderboard(limitCount = 30): Promise<Leaderb
         userId: id,
         displayName,
         photoURL: data.photoURL || undefined,
+        photoHidden: Boolean(data.photoHidden),
         gamesPlayed,
         wins,
         winRate,
@@ -190,6 +192,7 @@ export async function getMostWinsLeaderboard(limitCount = 30): Promise<Leaderboa
         userId: id,
         displayName,
         photoURL: data.photoURL || undefined,
+        photoHidden: Boolean(data.photoHidden),
         gamesPlayed,
         wins,
         winRate,
@@ -231,6 +234,7 @@ export async function getUserStats(userId: string): Promise<LeaderboardPlayer | 
       userId,
       displayName: data.displayName || 'یاریزان',
       photoURL: data.photoURL || undefined,
+      photoHidden: Boolean(data.photoHidden),
       gamesPlayed,
       wins,
       winRate: gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0,
@@ -250,10 +254,11 @@ export async function recordPlayerGameResult(params: {
   userId: string;
   displayName: string;
   photoURL?: string;
+  photoHidden?: boolean;
   isWinner: boolean;
   createdAt?: number;
 }): Promise<void> {
-  const { userId, displayName, photoURL, isWinner, createdAt } = params;
+  const { userId, displayName, photoURL, photoHidden, isWinner, createdAt } = params;
   
   // Guard against invalid or temporary IDs
   if (!userId || userId.startsWith('online_player_') || userId.startsWith('temp_') || userId.startsWith('dummy_')) {
@@ -282,7 +287,8 @@ export async function recordPlayerGameResult(params: {
         docRef,
         {
           displayName: cleanName,
-          ...(photoURL ? { photoURL } : {}),
+          ...(photoURL !== undefined ? { photoURL } : {}),
+          ...(photoHidden !== undefined ? { photoHidden } : {}),
           gamesPlayed: nextGames,
           wins: nextWins,
           createdAt: existingCreatedAt,
@@ -297,6 +303,7 @@ export async function recordPlayerGameResult(params: {
           userId,
           displayName: cleanName,
           photoURL: photoURL || null,
+          photoHidden: photoHidden ?? false,
           gamesPlayed: 1,
           wins: isWinner ? 1 : 0,
           createdAt: createdAt || Date.now(),

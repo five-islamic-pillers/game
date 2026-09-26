@@ -14,7 +14,9 @@ import {
   Clock, 
   Medal,
   Calendar,
-  ListOrdered
+  ListOrdered,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { 
   getMostPlayedLeaderboard, 
@@ -42,6 +44,24 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   const [myStats, setMyStats] = useState<LeaderboardPlayer | null>(null);
   const [loading, setLoading] = useState(false);
   const [animKey, setAnimKey] = useState(0);
+  const [showPhotos, setShowPhotos] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('fourpieces_leaderboard_show_photos') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleShowPhotos = () => {
+    SoundManager.click();
+    setShowPhotos((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('fourpieces_leaderboard_show_photos', next ? 'true' : 'false');
+      } catch {}
+      return next;
+    });
+  };
 
   const fetchLeaderboardData = async (tab: 'most_played' | 'most_wins') => {
     setLoading(true);
@@ -89,6 +109,14 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   const top1 = players[0] || null;
   const top2 = players[1] || null;
   const top3 = players[2] || null;
+
+  const shouldShowPhoto = (p: LeaderboardPlayer | null) => {
+    if (!showPhotos) return false;
+    if (!p || !p.photoURL) return false;
+    if (p.photoHidden) return false;
+    if (currentUserGoogleId && p.userId === currentUserGoogleId && isProfilePhotoHidden()) return false;
+    return true;
+  };
 
   return (
     <AnimatePresence>
@@ -184,7 +212,30 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            {/* Toggle Photos Visibility */}
+            <button
+              onClick={toggleShowPhotos}
+              title={showPhotos ? 'شاردنەوەی وێنەی پرۆفایلەکان لە خشتەی ڕیزبەندی' : 'پێشاندانی وێنەی پرۆفایلەکان لە خشتەی ڕیزبەندی'}
+              className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold ${
+                showPhotos
+                  ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/35 hover:bg-amber-500/25'
+                  : 'bg-stone-200/80 dark:bg-stone-800 text-stone-600 dark:text-stone-400 border border-stone-300 dark:border-stone-700 hover:bg-stone-300/80 dark:hover:bg-stone-700'
+              }`}
+            >
+              {showPhotos ? (
+                <>
+                  <Eye className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-[11px]">وێنە: دیارە</span>
+                </>
+              ) : (
+                <>
+                  <EyeOff className="w-3.5 h-3.5 text-stone-400" />
+                  <span className="text-[11px]">وێنە: شاراوە</span>
+                </>
+              )}
+            </button>
+
             <button
               onClick={() => {
                 SoundManager.click();
@@ -330,7 +381,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                         {/* Avatar & Silver Medal */}
                         <div className="relative mb-1">
                           <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-slate-200 dark:bg-stone-700 border-2 border-slate-300 dark:border-slate-400 shadow-sm flex items-center justify-center overflow-hidden">
-                            {top2.photoURL && (!currentUserGoogleId || top2.userId !== currentUserGoogleId || !isProfilePhotoHidden()) ? (
+                            {shouldShowPhoto(top2) ? (
                               <img src={top2.photoURL} alt={top2.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             ) : (
                               <User className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 dark:text-slate-300" />
@@ -411,7 +462,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                         <div className="relative mb-1">
                           <div className="absolute inset-0 rounded-xl bg-amber-400/40 blur-xs anim-aura pointer-events-none" />
                           <div className="relative w-11 h-11 sm:w-13 sm:h-13 rounded-xl bg-gradient-to-tr from-amber-200 to-yellow-100 dark:from-stone-700 dark:to-amber-950 border-2 sm:border-3 border-yellow-400 shadow-[0_0_12px_rgba(234,179,8,0.5)] flex items-center justify-center overflow-hidden">
-                            {top1.photoURL && (!currentUserGoogleId || top1.userId !== currentUserGoogleId || !isProfilePhotoHidden()) ? (
+                            {shouldShowPhoto(top1) ? (
                               <img src={top1.photoURL} alt={top1.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             ) : (
                               <User className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 dark:text-yellow-400" />
@@ -486,7 +537,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                         {/* Avatar & Bronze Medal */}
                         <div className="relative mb-1">
                           <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-amber-100 dark:bg-stone-800 border-2 border-amber-700 dark:border-amber-600 shadow-sm flex items-center justify-center overflow-hidden">
-                            {top3.photoURL && (!currentUserGoogleId || top3.userId !== currentUserGoogleId || !isProfilePhotoHidden()) ? (
+                            {shouldShowPhoto(top3) ? (
                               <img src={top3.photoURL} alt={top3.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             ) : (
                               <User className="w-4 h-4 sm:w-5 sm:h-5 text-amber-800 dark:text-amber-400" />
@@ -625,7 +676,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                               ? 'border-amber-700 bg-amber-50 dark:bg-stone-800' 
                               : 'border-stone-300 dark:border-stone-700 bg-stone-200 dark:bg-stone-700/60'
                           }`}>
-                            {player.photoURL && (!isCurrentUser || !isProfilePhotoHidden()) ? (
+                            {shouldShowPhoto(player) ? (
                               <img 
                                 src={player.photoURL} 
                                 alt={player.displayName} 

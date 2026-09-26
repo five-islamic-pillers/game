@@ -15,7 +15,9 @@ import {
   Trash2, 
   Loader2,
   ShieldCheck,
-  Edit3
+  Edit3,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { 
   type AuthUser,
@@ -24,6 +26,8 @@ import {
   updateInGameUsername, 
   getOriginalGooglePhoto,
   resizeImageToDataUrl,
+  isProfilePhotoHidden,
+  setProfilePhotoHidden,
   type UsernameEligibility
 } from '../services/authService';
 import { AVATAR_PRESETS } from '../utils/avatarPresets';
@@ -33,14 +37,17 @@ interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: AuthUser | null;
+  initialTab?: 'photo' | 'username' | 'privacy';
 }
 
 export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   isOpen,
   onClose,
-  currentUser
+  currentUser,
+  initialTab = 'photo'
 }) => {
-  const [activeTab, setActiveTab] = useState<'photo' | 'username'>('photo');
+  const [activeTab, setActiveTab] = useState<'photo' | 'username' | 'privacy'>(initialTab);
+  const [photoHiddenState, setPhotoHiddenState] = useState<boolean>(isProfilePhotoHidden());
   
   // Photo states
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -59,6 +66,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   // Load username and check 7-day cooldown on open
   useEffect(() => {
     if (isOpen && currentUser) {
+      setActiveTab(initialTab);
+      setPhotoHiddenState(isProfilePhotoHidden());
       setNewUsername(currentUser.displayName || '');
       setUsernameSuccessMsg(null);
       setUsernameErrorMsg(null);
@@ -74,7 +83,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           setCheckingEligibility(false);
         });
     }
-  }, [isOpen, currentUser]);
+  }, [isOpen, currentUser, initialTab]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -263,20 +272,20 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
             {/* Tab Switcher */}
             <div className="p-2.5 bg-[#ede6d8] dark:bg-stone-950/60 border-b border-stone-200 dark:border-stone-800 shrink-0">
-              <div className="grid grid-cols-2 gap-2 bg-[#fdfcf9] dark:bg-stone-900 p-1 rounded-xl border border-stone-200 dark:border-stone-800">
+              <div className="grid grid-cols-3 gap-1.5 bg-[#fdfcf9] dark:bg-stone-900 p-1 rounded-xl border border-stone-200 dark:border-stone-800">
                 <button
                   type="button"
                   onClick={() => {
                     SoundManager.click();
                     setActiveTab('photo');
                   }}
-                  className={`py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  className={`py-2 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     activeTab === 'photo'
                       ? 'bg-amber-600 text-white shadow-md'
                       : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800/60'
                   }`}
                 >
-                  <Camera className="w-4 h-4" />
+                  <Camera className="w-3.5 h-3.5" />
                   <span>وێنەی پرۆفایل</span>
                 </button>
                 <button
@@ -285,14 +294,29 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     SoundManager.click();
                     setActiveTab('username');
                   }}
-                  className={`py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  className={`py-2 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     activeTab === 'username'
                       ? 'bg-amber-600 text-white shadow-md'
                       : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800/60'
                   }`}
                 >
-                  <Edit3 className="w-4 h-4" />
-                  <span>ناوی ناو یاری (٧ ڕۆژ)</span>
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>ناوی ناو یاری</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    SoundManager.click();
+                    setActiveTab('privacy');
+                  }}
+                  className={`py-2 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    activeTab === 'privacy'
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800/60'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>پیشاندانی وێنە</span>
                 </button>
               </div>
             </div>
@@ -546,6 +570,51 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                       )}
                     </button>
                   </form>
+                </div>
+              )}
+
+              {/* TAB 3: Privacy & Photo Visibility */}
+              {activeTab === 'privacy' && (
+                <div className="space-y-5">
+                  <div className="p-4 bg-amber-500/10 dark:bg-stone-800/80 rounded-2xl border border-amber-500/30 space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center justify-center shrink-0">
+                          {photoHiddenState ? <EyeOff className="w-5 h-5 text-stone-500" /> : <Eye className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
+                        </div>
+                        <div>
+                          <span className="font-black text-sm text-stone-900 dark:text-white block">
+                            پیشاندانی وێنەی پرۆفایل
+                          </span>
+                          <span className="text-xs text-stone-500 dark:text-stone-400 font-medium">
+                            لە خشتەی ڕیزبەندی و ژوورەکانی یاری فرە-یاریزان
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          SoundManager.click();
+                          const nextVal = !photoHiddenState;
+                          setPhotoHiddenState(nextVal);
+                          await setProfilePhotoHidden(nextVal);
+                        }}
+                        className={`px-4 py-2 rounded-xl font-black text-xs transition-all cursor-pointer shadow-sm active:scale-95 ${
+                          photoHiddenState
+                            ? 'bg-stone-300 dark:bg-stone-700 text-stone-700 dark:text-stone-200'
+                            : 'bg-emerald-600 text-white'
+                        }`}
+                      >
+                        {photoHiddenState ? 'شاراوەیە (Disabled)' : 'دیارە (Active)'}
+                      </button>
+                    </div>
+
+                    <div className="p-3 bg-white/70 dark:bg-stone-900/70 rounded-xl border border-stone-200 dark:border-stone-800 text-xs text-stone-600 dark:text-stone-300 font-medium space-y-1.5 leading-relaxed">
+                      <p>• لەکاتی <strong>دیارە</strong>: وێنەی پرۆفایلەکەت لە ستوونی پلەکانی یەکەم و دووەم و سێیەم و خشتەی سەرجەم یاریزانان لە ڕیزبەندی پیشان دەدرێت.</p>
+                      <p>• لەکاتی <strong>شاراوە</strong>: لەجیاتی وێنە، پیتی یەکەمی ناوەکەت وەک ئایکۆن بەکاردێت بۆ پاراستنی تایبەتمەندێتی.</p>
+                    </div>
+                  </div>
                 </div>
               )}
 

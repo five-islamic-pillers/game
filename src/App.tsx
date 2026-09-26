@@ -153,6 +153,7 @@ export default function App() {
   const [showNavDrawer, setShowNavDrawer] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [playerNameError, setPlayerNameError] = useState<string | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
@@ -515,10 +516,20 @@ export default function App() {
 
   const handleAddPlayer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPlayerName.trim() && players.length < 6) {
+    const clean = newPlayerName.trim();
+    if (!clean) return;
+
+    // Disallow duplicate player names (case-insensitive)
+    if (players.some(p => p.name.trim().toLowerCase() === clean.toLowerCase())) {
+      setPlayerNameError('ئەم ناوە پێشتر لە یارییەکەدا بەکارهاتووە! تکایە ناوێکی جیاواز بنووسە.');
+      return;
+    }
+
+    setPlayerNameError(null);
+    if (players.length < 6) {
       setPlayers([...players, { 
         id: crypto.randomUUID(), 
-        name: newPlayerName.trim(), 
+        name: clean, 
         score: 0,
         color: PLAYER_COLORS[players.length],
         position: 1
@@ -1912,7 +1923,10 @@ export default function App() {
                       spellCheck="false"
                       maxLength={25}
                       value={newPlayerName}
-                      onChange={(e) => setNewPlayerName(e.target.value)}
+                      onChange={(e) => {
+                        setNewPlayerName(e.target.value);
+                        if (playerNameError) setPlayerNameError(null);
+                      }}
                       placeholder={players.length >= 6 ? "تەواوی ٦ یاریزان زیادکراوە" : `ناوی یاریزانی ${players.length + 1}...`}
                       className="w-full pr-9 pl-4 py-3 bg-[#faf8f5] dark:bg-stone-800/90 border-2 border-stone-200 dark:border-stone-700 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-500 rounded-2xl focus:outline-none focus:border-emerald-500 transition-colors font-bold text-sm"
                       disabled={players.length >= 6}
@@ -1928,23 +1942,40 @@ export default function App() {
                   </button>
                 </form>
 
+                {/* Error Banner for Duplicate or Invalid Name */}
+                {playerNameError && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-2 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-1.5"
+                  >
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{playerNameError}</span>
+                  </motion.div>
+                )}
+
                 {/* Quick Add Logged-in User Chip */}
-                {authUser?.displayName && players.length < 6 && !players.some(p => p.name === authUser.displayName) && (
+                {authUser?.displayName && players.length < 6 && !players.some(p => p.name.trim().toLowerCase() === authUser.displayName?.trim().toLowerCase()) && (
                   <div className="flex items-center gap-2 pt-1">
                     <span className="text-[11px] font-bold text-stone-400">پێشنیار:</span>
                     <button
                       type="button"
                       onClick={() => {
                         SoundManager.click();
-                        if (players.length < 6 && authUser.displayName) {
-                          setPlayers([...players, {
-                            id: crypto.randomUUID(),
-                            name: authUser.displayName,
-                            score: 0,
-                            color: PLAYER_COLORS[players.length],
-                            position: 1
-                          }]);
+                        const myName = authUser.displayName?.trim();
+                        if (!myName || players.length >= 6) return;
+                        if (players.some(p => p.name.trim().toLowerCase() === myName.toLowerCase())) {
+                          setPlayerNameError('ئەم ناوە پێشتر لە یارییەکەدا بەکارهاتووە!');
+                          return;
                         }
+                        setPlayerNameError(null);
+                        setPlayers([...players, {
+                          id: crypto.randomUUID(),
+                          name: myName,
+                          score: 0,
+                          color: PLAYER_COLORS[players.length],
+                          position: 1
+                        }]);
                       }}
                       className="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1"
                     >

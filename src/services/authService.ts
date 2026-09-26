@@ -10,7 +10,16 @@ import {
   browserLocalPersistence,
   type User 
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  setDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  limit
+} from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { setCookie, getCookie, eraseCookie } from '../utils/cookieUtils';
 
@@ -49,9 +58,17 @@ export function isProfilePhotoHidden(): boolean {
   }
 }
 
-export function setProfilePhotoHidden(hidden: boolean): void {
+export async function setProfilePhotoHidden(hidden: boolean): Promise<void> {
   try {
     localStorage.setItem(HIDE_PHOTO_KEY, hidden ? 'true' : 'false');
+    const user = getCurrentUser();
+    if (user && user.uid && !user.uid.startsWith('guest_')) {
+      const userRef = doc(db, 'leaderboard_users', user.uid);
+      await setDoc(userRef, {
+        photoHidden: hidden,
+        updatedAt: Date.now()
+      }, { merge: true }).catch(() => {});
+    }
     if (currentActiveUser) {
       notifyListeners(currentActiveUser);
     }
@@ -433,6 +450,33 @@ export async function updateInGameUsername(
   const now = Date.now();
 
   try {
+    // 0. Verify that this username is not already claimed by another registered player
+    if (userId && !userId.startsWith('guest_')) {
+      try {
+        const checkQuery = query(
+          collection(db, 'leaderboard_users'),
+          where('displayName', '==', cleanName),
+          limit(2)
+        );
+        const checkSnap = await getDocs(checkQuery);
+        let isTaken = false;
+        checkSnap.forEach((docSnap) => {
+          if (docSnap.id !== userId) {
+            isTaken = true;
+          }
+        });
+
+        if (isTaken) {
+          return { 
+            success: false, 
+            error: 'ئەم ناوە پێشتر لەلایەن یاریزانێکی ترەوە تۆمارکراوە! تکایە ناوێکی جیاواز بنووسە.' 
+          };
+        }
+      } catch (checkErr) {
+        console.warn('Username uniqueness check warning:', checkErr);
+      }
+    }
+
     // 1. If active Firebase Auth user, update Firebase profile
     if (auth.currentUser && auth.currentUser.uid === userId) {
       await updateProfile(auth.currentUser, { displayName: cleanName });

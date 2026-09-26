@@ -63,6 +63,7 @@ export const HeaderNavDrawer: React.FC<HeaderNavDrawerProps> = ({
   const [hidePhoto, setHidePhoto] = useState<boolean>(() => isProfilePhotoHidden());
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [editProfileInitialTab, setEditProfileInitialTab] = useState<'photo' | 'username' | 'privacy'>('photo');
   const [isSoundMuted, setIsSoundMuted] = useState<boolean>(() => SoundManager.isSoundMuted());
   const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
   const [googleSignInError, setGoogleSignInError] = useState<string | null>(null);
@@ -230,26 +231,42 @@ export const HeaderNavDrawer: React.FC<HeaderNavDrawerProps> = ({
                   </button>
                 </div>
 
-                {/* Direct Button: Change Photo & Username */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    SoundManager.click();
-                    setShowEditProfileModal(true);
-                  }}
-                  className="w-full mt-3 py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-200 border border-amber-500/35 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-98"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                  <span>گۆڕینی وێنە و ناوی ناو یاری (٧ ڕۆژ)</span>
-                </button>
+                {/* Direct Action Buttons: Change Photo & Change Username */}
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      SoundManager.click();
+                      setEditProfileInitialTab('photo');
+                      setShowEditProfileModal(true);
+                    }}
+                    className="py-2 px-2.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 dark:text-amber-200 border border-amber-500/35 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-98"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="truncate">گۆڕینی وێنە</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      SoundManager.click();
+                      setEditProfileInitialTab('username');
+                      setShowEditProfileModal(true);
+                    }}
+                    className="py-2 px-2.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 dark:text-amber-200 border border-amber-500/35 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-98"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="truncate">گۆڕینی ناو (٧ ڕۆژ)</span>
+                  </button>
+                </div>
 
                 {/* Account Settings Sub-panel (Photo visibility toggle & Logout) */}
                 {showAccountSettings && (
-                  <div className="mt-3 pt-3 border-t border-amber-500/20 dark:border-stone-700 space-y-2.5">
+                  <div className="mt-3 pt-3 border-t border-amber-500/20 dark:border-stone-700 space-y-2.5 animate-in fade-in">
                     <div className="flex items-center justify-between text-xs font-bold text-stone-700 dark:text-stone-300">
                       <span className="flex items-center gap-1.5">
                         {hidePhoto ? <EyeOff className="w-4 h-4 text-stone-400" /> : <Eye className="w-4 h-4 text-emerald-500" />}
-                        <span>پێشاندانی وێنەی هەژمار:</span>
+                        <span>پێشاندانی وێنە لە ڕیزبەندی:</span>
                       </span>
                       <button
                         type="button"
@@ -264,7 +281,20 @@ export const HeaderNavDrawer: React.FC<HeaderNavDrawerProps> = ({
                       </button>
                     </div>
 
-                    <div className="flex justify-end pt-1">
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          SoundManager.click();
+                          setEditProfileInitialTab('privacy');
+                          setShowEditProfileModal(true);
+                        }}
+                        className="text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>ڕێکخستنی زیاتری تایبەتمەندی</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={handleSignOut}
@@ -542,6 +572,7 @@ export const HeaderNavDrawer: React.FC<HeaderNavDrawerProps> = ({
       isOpen={showEditProfileModal}
       onClose={() => setShowEditProfileModal(false)}
       currentUser={currentUser}
+      initialTab={editProfileInitialTab}
     />
   </>
   );
