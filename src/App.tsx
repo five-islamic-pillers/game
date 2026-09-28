@@ -171,7 +171,7 @@ export default function App() {
   const [onlineConnected, setOnlineConnected] = useState(false);
   const [initialOnlineRoomCode, setInitialOnlineRoomCode] = useState<string | null>(null);
 
-  // Check URL query parameters for direct room joining (e.g. ?room=1234)
+  // Check URL query parameters for direct room joining or deep link views (?view=rules, ?view=leaderboard, etc.)
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
@@ -179,6 +179,17 @@ export default function App() {
       if (roomParam) {
         setInitialOnlineRoomCode(roomParam.trim());
         setShowOnlineLobby(true);
+      }
+
+      const viewParam = searchParams.get('view');
+      if (viewParam === 'rules') {
+        setShowRulesModal(true);
+      } else if (viewParam === 'leaderboard') {
+        setShowLeaderboardModal(true);
+      } else if (viewParam === 'online') {
+        setShowOnlineLobby(true);
+      } else if (viewParam === 'download') {
+        setShowAndroidModal(true);
       }
     } catch {
       // Ignore URL parsing errors

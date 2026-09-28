@@ -45,6 +45,14 @@
         "updatedAt": { "type": "number", "description": "Timestamp of last match completion" }
       },
       "required": ["userId", "displayName", "gamesPlayed", "wins"]
+    },
+    "ConnectionTest": {
+      "title": "Connection Test Document",
+      "description": "Used to test connection to Firestore backend",
+      "type": "object",
+      "properties": {
+        "connected": { "type": "boolean", "description": "Connection test flag" }
+      }
     }
   },
   "firestore": {
@@ -59,6 +67,10 @@
     "/leaderboard_users/{userId}": {
       "schema": "LeaderboardUser",
       "description": "Public player ranking statistics for most played games and most wins"
+    },
+    "/test/{docId}": {
+      "schema": "ConnectionTest",
+      "description": "Validation test document for checking Firestore backend connection"
     }
   }
 }

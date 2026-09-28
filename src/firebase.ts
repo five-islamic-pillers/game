@@ -1,16 +1,27 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, doc, getDocFromServer, type Firestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Use specified databaseId if present, otherwise default
-export const db = (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)')
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+const targetDatabaseId = (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)')
+  ? firebaseConfig.firestoreDatabaseId
+  : undefined;
 
+// Initialize Firestore with experimentalForceLongPolling enabled for robust connectivity in iframes and proxied environments
+let firestoreInstance: Firestore;
+try {
+  firestoreInstance = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+  }, targetDatabaseId);
+} catch {
+  // If Firestore instance has already been initialized in the current runtime context
+  firestoreInstance = targetDatabaseId ? getFirestore(app, targetDatabaseId) : getFirestore(app);
+}
+
+export const db = firestoreInstance;
 export const auth = getAuth(app);
 
 // Initialize analytics conditionally if supported in the browser
@@ -25,14 +36,16 @@ if (typeof window !== 'undefined' && firebaseConfig.measurementId) {
   });
 }
 
-// Verify connection
-async function verifyFirestore() {
+// Validate connection to Firestore
+async function testConnection() {
   try {
-    await getDocFromServer(doc(db, '_connection_test', 'ping'));
-  } catch {
-    // Expected if document doesn't exist or client starts up
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn("Firestore: The client is offline. Operating in offline cache mode.");
+    }
   }
 }
-verifyFirestore();
+testConnection();
 
 export default app;

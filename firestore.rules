@@ -13,5 +13,8 @@ service cloud.firestore {
     match /leaderboard_users/{userId} {
       allow read, write: if true;
     }
+    match /test/{docId} {
+      allow read: if true;
+    }
   }
 }

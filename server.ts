@@ -33,6 +33,78 @@ async function startServer() {
     res.json({ status: "ok", timestamp: Date.now() });
   });
 
+  // Dynamic sitemap.xml for Google Search Console
+  app.get("/sitemap.xml", (req, res) => {
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+    const host = req.get("host") || "ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app";
+    const baseUrl = `${protocol}://${host}`;
+    const today = new Date().toISOString().split("T")[0];
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>${baseUrl}/</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>${baseUrl}/board.jpg</image:loc>
+      <image:title>تەختەی یاری پێنج پایەکەی ئیسلام</image:title>
+      <image:caption>نەخشە و خانەکانی یاری خێزانی پێنج پایەی ئیسلام</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>${baseUrl}/bg.png</image:loc>
+      <image:title>پێنج پایەکەی ئیسلام</image:title>
+      <image:caption>یاری پەروەردەیی و مەعریفی ئیسلامی بۆ تەواوی خێزان</image:caption>
+    </image:image>
+  </url>
+  <url>
+    <loc>${baseUrl}/?view=rules</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/?view=leaderboard</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/?view=online</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/?view=download</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+</urlset>`;
+
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    res.send(xml);
+  });
+
+  // Dynamic robots.txt
+  app.get("/robots.txt", (req, res) => {
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+    const host = req.get("host") || "ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app";
+    const baseUrl = `${protocol}://${host}`;
+
+    const robots = `User-agent: *
+Allow: /
+
+Sitemap: ${baseUrl}/sitemap.xml
+`;
+    res.header("Content-Type", "text/plain; charset=utf-8");
+    res.send(robots);
+  });
+
   // POST /api/send-otp
   app.post("/api/send-otp", async (req, res) => {
     try {

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <!-- لاپەڕەی سەرەکی و تەختەی یاری -->
+  <url>
+    <loc>https://ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app/</loc>
+    <lastmod>2026-09-28</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app/board.jpg</image:loc>
+      <image:title>تەختەی یاری پێنج پایەکەی ئیسلام</image:title>
+      <image:caption>نەخشە و خانەکانی یاری خێزانی پێنج پایەی ئیسلام</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app/bg.png</image:loc>
+      <image:title>پێنج پایەکەی ئیسلام</image:title>
+      <image:caption>یاری پەروەردەیی و مەعریفی ئیسلامی بۆ تەواوی خێزان</image:caption>
+    </image:image>
+  </url>
+
+  <!-- ڕێنمایی و یاساکانی یاری و پێنج پایەی ئیسلام -->
+  <url>
+    <loc>https://ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app/?view=rules</loc>
+    <lastmod>2026-09-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- ڕیزبەندی و پلەبەندی یاریزانان -->
+  <url>
+    <loc>https://ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app/?view=leaderboard</loc>
+    <lastmod>2026-09-28</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- یاری ئۆنلاین بە کۆمەڵ لەگەڵ هاوڕێیان -->
+  <url>
+    <loc>https://ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app/?view=online</loc>
+    <lastmod>2026-09-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- داگرتنی ئەپی ئەندرۆید PWA / APK -->
+  <url>
+    <loc>https://ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app/?view=download</loc>
+    <lastmod>2026-09-28</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+</urlset>
