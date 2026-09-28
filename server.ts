@@ -26,6 +26,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Trust proxy for proper protocol & host resolution behind cloud run / load balancers
+  app.set("trust proxy", true);
+
   app.use(express.json());
 
   // API Health Check
@@ -33,11 +36,12 @@ async function startServer() {
     res.json({ status: "ok", timestamp: Date.now() });
   });
 
-  // Dynamic sitemap.xml for Google Search Console
-  app.get("/sitemap.xml", (req, res) => {
-    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
-    const host = req.get("host") || "ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app";
-    const baseUrl = `${protocol}://${host}`;
+  // Dynamic sitemap.xml handler for Google Search Console
+  const serveSitemap = (req: express.Request, res: express.Response) => {
+    const rawHost = req.get("host") || "ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app";
+    const isLocal = rawHost.includes("localhost") || rawHost.includes("127.0.0.1");
+    const protocol = isLocal ? "http" : "https";
+    const baseUrl = `${protocol}://${rawHost}`;
     const today = new Date().toISOString().split("T")[0];
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -87,14 +91,19 @@ async function startServer() {
 </urlset>`;
 
     res.header("Content-Type", "application/xml; charset=utf-8");
+    res.header("X-Robots-Tag", "noindex, follow");
     res.send(xml);
-  });
+  };
+
+  app.get("/sitemap.xml", serveSitemap);
+  app.get("/sitemap", serveSitemap);
 
   // Dynamic robots.txt
   app.get("/robots.txt", (req, res) => {
-    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
-    const host = req.get("host") || "ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app";
-    const baseUrl = `${protocol}://${host}`;
+    const rawHost = req.get("host") || "ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app";
+    const isLocal = rawHost.includes("localhost") || rawHost.includes("127.0.0.1");
+    const protocol = isLocal ? "http" : "https";
+    const baseUrl = `${protocol}://${rawHost}`;
 
     const robots = `User-agent: *
 Allow: /
