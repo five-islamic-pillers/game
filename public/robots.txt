@@ -1,5 +1,4 @@
 User-agent: *
 Allow: /
 
-# Sitemap for Google Search Console & Search Crawlers
-Sitemap: https://ais-pre-ec3oxz4hx4cyh2q5bypnxc-27342607303.europe-west2.run.app/sitemap.xml
+Sitemap: https://five-islamic-pillers.github.io/game/sitemap.xml
