@@ -1572,10 +1572,10 @@ export default function App() {
                     setShowNavDrawer(true);
                   }}
                   className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-[#fdfcf9] hover:bg-[#f3ede1] dark:bg-stone-800 dark:hover:bg-stone-700 active:scale-95 text-stone-800 dark:text-stone-100 rounded-xl text-xs sm:text-sm font-black shadow-sm border border-stone-200/90 dark:border-stone-700/80 transition-all cursor-pointer group"
-                  title="پێڕستی سەرەکی"
+                  title="مێنیو"
                 >
                   <Menu className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 dark:text-amber-400 group-hover:rotate-180 transition-transform duration-300" />
-                  <span>پێڕست</span>
+                  <span>مێنیو</span>
                 </button>
               </div>
             </nav>

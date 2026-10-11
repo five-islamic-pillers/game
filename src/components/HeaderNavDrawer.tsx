@@ -157,7 +157,7 @@ export const HeaderNavDrawer: React.FC<HeaderNavDrawerProps> = ({
                   <Sparkles className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="font-black text-stone-900 dark:text-white text-lg">پێڕستی سەرەکی</h3>
+                  <h3 className="font-black text-stone-900 dark:text-white text-lg">مێنیوی سەرەکی</h3>
                   <p className="text-xs text-stone-500 dark:text-stone-400 font-bold">یاری خێزانی ٥ پایەکەی ئیسلام</p>
                 </div>
               </div>
